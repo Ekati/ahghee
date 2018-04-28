@@ -2,13 +2,16 @@ namespace Ahghee
 
 open System
 
-
+type MemoryPointer = { FileName: string; offset: int64; length: int64 }       
 type MimeBytes = { Mime: Option<string>; Bytes : Byte[] } 
+type Binary =
+    | MimeBytes of MimeBytes
+    | MemoryPointer of MemoryPointer
 type NodeIRI = { Domain: string; Database: string; Graph: string; NodeId: string; RouteKey: Option<string>} 
 type Data =
   | InternalIRI of NodeIRI
   | ExternalIRI of System.Uri
-  | Binary of MimeBytes
+  | Binary of Binary
 type Pair = { Key: Data; Value : seq<Data> }
 type Node = { NodeIds: seq<NodeIRI>; Attributes: seq<Pair> }
  

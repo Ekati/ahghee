@@ -8,7 +8,7 @@ open System
 
 let Id id = { NodeIRI.Domain = "biggraph://example.com"; NodeIRI.Database="test"; NodeIRI.Graph="People"; NodeIRI.NodeId=id; NodeIRI.RouteKey= None} 
 let TestCreateExternalIRI = ExternalIRI (System.Uri( "https://ahghee.com" )) 
-let TestCreateBinary = Binary { MimeBytes.Mime= Some("application/json"); MimeBytes.Bytes = Array.Empty<byte>() } 
+let TestCreateBinary = MimeBytes { MimeBytes.Mime= Some("application/json"); MimeBytes.Bytes = Array.Empty<byte>() } 
 
 [<Fact>]
 let ``Can create an InternalIRI type`` () =
@@ -31,7 +31,7 @@ let ``Can create an ExternalIRI type`` () =
 
 [<Fact>]
 let ``Can create a Binary type`` () =
-    let d : Data = TestCreateBinary
+    let d : Data = Binary TestCreateBinary
     let success = match d with 
         | InternalIRI (nodeIRI) -> false
         | ExternalIRI (external) -> false
@@ -39,7 +39,7 @@ let ``Can create a Binary type`` () =
     Assert.True success   
 
 let mimePlainTextUtf8 = Some("text/plain;charset=utf-8")
-let BStr (text:string) = Binary { Mime = mimePlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) }
+let BStr (text:string) = Binary (MimeBytes { Mime = mimePlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) })
     
 let Prop (key:Data) (values:seq<Data>) =
     let pair = { Pair.Key = key; Value = (values |> Seq.toArray)}   
@@ -53,7 +53,7 @@ let ``Can create a Pair`` () =
     let pair = PropStr "firstName" [|"Richard"; "Dick"|]
 
     let success = match pair.Key with 
-                | Binary (b) when b.Mime.IsSome && b.Mime.Value = mimePlainTextUtf8.Value -> true 
+                | Binary (MimeBytes b) when b.Mime.IsSome && b.Mime.Value = mimePlainTextUtf8.Value -> true 
                 | _ -> false
     Assert.True success     
     
