@@ -8,6 +8,7 @@ open System
 open System.IO
 open System.Text
 open System.Threading.Tasks
+open FSharp.Data
 
 let mimePlainTextUtf8 = Some("text/plain;charset=utf-8")
 let BStr (text:string) = BinaryBlock (MimeBytes { Mime = mimePlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) })
@@ -19,7 +20,12 @@ let Prop (key:Data) (values:seq<Data>) =
 let PropStr (key:string) (values:seq<string>) = Prop (BStr key) (values |> Seq.map(fun x -> BStr x))  
 let PropStrData (key:string) (values:seq<Data>) = Prop (BStr key) values      
 
+type GraphML = XmlProvider<"""https://raw.githubusercontent.com/apache/tinkerpop/master/data/tinkerpop-modern.xml""">
+
 type MyTests(output:ITestOutputHelper) =
+
+    let TheCrew = GraphML.Load("https://raw.githubusercontent.com/apache/tinkerpop/master/data/tinkerpop-modern.xml")
+
     
     let Id id = AddressBlock.NodeID { Domain = "biggraph://example.com"; Database="test"; Graph="People"; NodeId=id; RouteKey= None} 
     let TestCreateBinary = MimeBytes { MimeBytes.Mime= Some("application/json"); MimeBytes.Bytes = Array.Empty<byte>() } 
@@ -28,20 +34,20 @@ type MyTests(output:ITestOutputHelper) =
     member __.``Can create an InternalIRI type`` () =
         let id = Data.AddressBlock ( Id "1" ) 
         let success = match id with 
-            | Data.AddressBlock(AddressBlock.NodeID nodeid) -> true
-            | Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> true
-            | Data.BinaryBlock(BinaryBlock.MimeBytes data) -> false
-            | Data.BinaryBlock(BinaryBlock.MemoryPointer pointer) -> false   
+                        | Data.AddressBlock(AddressBlock.NodeID nodeid) -> true
+                        | Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> true
+                        | Data.BinaryBlock(BinaryBlock.MimeBytes data) -> false
+                        | Data.BinaryBlock(BinaryBlock.MemoryPointer pointer) -> false   
         Assert.True(success)  
         
     [<Fact>]
     member __.``Can create a Binary type`` () =
         let d : Data = BinaryBlock TestCreateBinary
         let success = match d with 
-            | Data.AddressBlock(AddressBlock.NodeID nodeId) -> false
-            | Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> false
-            | Data.BinaryBlock(BinaryBlock.MimeBytes data) -> true
-            | Data.BinaryBlock(BinaryBlock.MemoryPointer pointer) -> true
+                        | Data.AddressBlock(AddressBlock.NodeID nodeId) -> false
+                        | Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> false
+                        | Data.BinaryBlock(BinaryBlock.MimeBytes data) -> true
+                        | Data.BinaryBlock(BinaryBlock.MemoryPointer pointer) -> true
         Assert.True success   
     
    
@@ -51,8 +57,8 @@ type MyTests(output:ITestOutputHelper) =
         let pair = PropStr "firstName" [|"Richard"; "Dick"|]
     
         let success = match pair.Key with 
-                    | BinaryBlock (MimeBytes b) when b.Mime.IsSome && b.Mime.Value = mimePlainTextUtf8.Value -> true 
-                    | _ -> false
+                        | BinaryBlock (MimeBytes b) when b.Mime.IsSome && b.Mime.Value = mimePlainTextUtf8.Value -> true 
+                        | _ -> false
         Assert.True success     
         
     [<Fact>]
@@ -95,6 +101,15 @@ type MyTests(output:ITestOutputHelper) =
                    }      
         [| node1; node2; node3 |]      
         |> Array.toSeq             
+    
+    member __.buildNodesTheCrew : seq<Node> =
+        TheCrew.Graph.Nodes 
+        |> Seq.map (fun n -> 
+                             { 
+                                Node.NodeIDs = [| Id (n.Id.ToString()) |];  
+                                Node.Attributes = Seq.empty
+                             }
+                    )
     
     member __.buildGraph : Graph =
         let g:Graph = new Graph(new MemoryStore())
@@ -147,8 +162,8 @@ type MyTests(output:ITestOutputHelper) =
                                          |> Seq.collect (fun n -> n.Attributes) 
                                          |> Seq.collect (fun y -> y.Value 
                                                                |> Seq.map (fun x -> match x with  
-                                                               | Data.AddressBlock(id) -> Some(id) 
-                                                               | _ -> None))   
+                                                                                       | Data.AddressBlock(id) -> Some(id) 
+                                                                                       | _ -> None))   
                                          |> Seq.filter (fun x -> match x with 
                                                                  | Some id -> true 
                                                                  | _ -> false)
@@ -159,6 +174,36 @@ type MyTests(output:ITestOutputHelper) =
     
         Assert.NotEmpty nodesWithIncomingEdges.Result
     
+    [<Fact>] 
+    member __.``Can get IDs after load tinkerpop-crew.xml into graph`` () =
+         let g:Graph = new Graph(new MemoryStore())
+         let nodes = __.buildNodesTheCrew
+         let task = g.Add nodes
+         match task.Status with
+             | TaskStatus.Created -> task.Start()
+             | _ -> ()                                                                     
+         task.Wait()
+                  
+         output.WriteLine("g.Nodes length: {0}", g.Nodes |> Seq.length )
+         
+         let loadedIds = g.Nodes
+                         |> Seq.collect (fun n -> n.NodeIDs)
+                         |> Seq.map (fun id -> match id with    
+                                               | NodeID(nid) -> Some(nid.NodeId)
+                                               | MemoryPointer(mp) -> None)  
+                         |> Seq.filter (fun x -> x.IsSome)
+                         |> Seq.map (fun x -> x.Value)        
+                         
+         output.WriteLine("loadedIds: {0}", loadedIds |> String.concat " ")
+                                       
+         let expectedIds = [| 1;2;3;4;5;6; |] 
+                           |> Array.toSeq 
+                           |> Seq.map (fun n -> n.ToString())
+                           
+         Assert.Equal<string>(expectedIds,loadedIds)                             
+             
+
+
 //    [<Fact>]
 //    member __.``I can use the file api`` () =
 //        let f = System.IO.File.Open("/home/austin/foo",FileMode.OpenOrCreate,FileAccess.ReadWrite)
