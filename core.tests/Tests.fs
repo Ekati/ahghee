@@ -59,9 +59,10 @@ let ``Can create a Node`` () =
 
     let empty = node.Attributes |> Seq.isEmpty
     Assert.True (not empty)
-    
-[<Fact>]
-let ``Can traverse local graph index`` () =
+
+
+
+let buildGraph : Graph = 
     let node1 = { 
                 Node.NodeIDs = [| Id "1" |] 
                 Node.Attributes = [|
@@ -86,21 +87,28 @@ let ``Can traverse local graph index`` () =
                                   |]
                }      
                
-    let graph:Graph = new Graph()
+    let graph:Graph = new Graph(new MemoryStore())
     graph.Add [| node1; node2; node3 |]
+    graph
     
-    let nodesWithIncomingEdges = node3.Attributes 
-                                         |> Seq.collect (fun y -> y.Value 
-                                                               |> Seq.map (fun x -> match x with  
-                                                               | Data.AddressBlock(id) -> Some(id) 
-                                                               | _ -> None))   
-                                         |> Seq.filter (fun x -> match x with 
-                                                                 | Some id -> true 
-                                                                 | _ -> false)
-                                         |> Seq.map    (fun x -> x.Value )
-                                         |> Seq.distinct
-                                         |> Seq.map (fun x -> graph.TryFind x)                                                                            
+[<Fact>]
+let ``Can traverse local graph index`` () =
+    
+    let g = buildGraph
+    let nodesWithIncomingEdges = g.Nodes 
+                                     |> Seq.collect (fun n -> n.Attributes) 
+                                     |> Seq.collect (fun y -> y.Value 
+                                                           |> Seq.map (fun x -> match x with  
+                                                           | Data.AddressBlock(id) -> Some(id) 
+                                                           | _ -> None))   
+                                     |> Seq.filter (fun x -> match x with 
+                                                             | Some id -> true 
+                                                             | _ -> false)
+                                     |> Seq.map    (fun x -> x.Value )
+                                     |> Seq.distinct
+                                     |> g.TryFind 
+                                                                           
 
-    Assert.NotEmpty nodesWithIncomingEdges
+    Assert.NotEmpty nodesWithIncomingEdges.Result
 
     

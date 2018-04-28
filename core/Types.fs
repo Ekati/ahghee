@@ -1,6 +1,7 @@
 namespace Ahghee
 
 open System
+open System.Threading.Tasks
 
 // Node Block
 // |----------
@@ -59,14 +60,37 @@ type Data =
   
 type KeyValue = { Key: Data; Value : seq<Data> }
 type Node = { NodeIDs: seq<AddressBlock>; Attributes: seq<KeyValue> }
+
+type Either<'L, 'R> =
+    | Left of 'L
+    | Right of 'R
+
+type IStorage =
+    abstract member Nodes: seq<Node>
+    abstract member Add: seq<Node> -> System.Threading.Tasks.Task
+    abstract member TryFind: seq<AddressBlock> -> System.Threading.Tasks.Task<seq<AddressBlock * Either<Node, Exception>>>
+
+type MemoryStore() =
+    let mutable _nodes:seq<Node> = Seq.empty
+    interface IStorage with
+        member this.Nodes = _nodes
+        member this.Add (nodes:seq<Node>) = 
+            _nodes <- Seq.append _nodes nodes
+            Task.CompletedTask
+        member this.TryFind (addresses:seq<AddressBlock>) =
+            let matches = addresses |> Seq.map (fun addr -> 
+                                                match addr with 
+                                                | NodeID(id) -> 
+                                                                let isLocal = _nodes 
+                                                                              |> Seq.tryFind ( fun n -> n.NodeIDs |> Seq.exists (fun nn -> nn = addr))
+                                                                match isLocal with 
+                                                                | Some node -> (addr, Left(node))
+                                                                | None -> (addr, Right (Failure "remote nodes not supported yet"))
+                                                | MemoryPointer(pointer) -> (addr, Right (Failure  "MemoryPointer not supported yet")) 
+                                                )
+            Task.FromResult matches                                                
  
-type Graph() =  
-    let mutable _nodes:seq<Node> = Seq.empty 
-    member x.Nodes = _nodes
-    member x.Add (nodes:seq<Node>) = _nodes <- Seq.append _nodes nodes
-    member x.TryFind (addressBlock:AddressBlock):Option<Node> = 
-        let isLocal = _nodes 
-                      |> Seq.tryFind ( fun n -> n.NodeIDs |> Seq.exists (fun nn -> nn = addressBlock))
-        match isLocal with 
-        | Some node -> Some(node)
-        | None -> failwith "remote nodes not supported yet"                        
+type Graph(storage:IStorage) =  
+    member x.Nodes = storage.Nodes
+    member x.Add (nodes:seq<Node>) = storage.Add nodes
+    member x.TryFind (addressBlock:seq<AddressBlock>) = storage.TryFind addressBlock                       
