@@ -2,7 +2,7 @@ namespace Ahghee
 
 open System
 
-type NodeIRI = { Domain: string; Database: string; NodeId: string; RouteKey: Option<string> }
+type NodeIRI = { Domain: string; Database: string; Graph: string; NodeId: string; RouteKey: Option<string> }
 type MimeBytes = { Mime: Option<string>; Bytes : Byte[] }
 
 type Data =

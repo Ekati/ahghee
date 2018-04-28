@@ -7,7 +7,7 @@ open System
 
 [<Fact>]
 let ``Can create an InternalIRI type`` () =
-    let d : Data = InternalIRI { NodeIRI.Domain = "biggraph://example.com"; NodeIRI.Database="test"; NodeIRI.NodeId="1"; NodeIRI.RouteKey= None}
+    let d : Data = InternalIRI { NodeIRI.Domain = "biggraph://example.com"; NodeIRI.Database="test"; NodeIRI.Graph="People"; NodeIRI.NodeId="1"; NodeIRI.RouteKey= None}
     let success = match d with 
         | InternalIRI (nodeIRI) -> true
         | ExternalIRI (external) -> false
