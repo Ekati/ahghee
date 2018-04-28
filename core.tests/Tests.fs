@@ -159,17 +159,17 @@ type MyTests(output:ITestOutputHelper) =
     
         Assert.NotEmpty nodesWithIncomingEdges.Result
     
-    [<Fact>]
-    member __.``I can use the file api`` () =
-        let f = System.IO.File.Open("/home/austin/foo",FileMode.OpenOrCreate,FileAccess.ReadWrite)
-        f.Seek(10L, SeekOrigin.Begin)
-        let buffer = Array.zeroCreate 100
-        let doit = f.AsyncRead(buffer, 0, 100)
-        let size = doit |> Async.RunSynchronously
-        output.WriteLine("we read out size:{0}: {1}", size , Encoding.UTF8.GetString(buffer))
-        f.Close
-        
-        Assert.True(true)
+//    [<Fact>]
+//    member __.``I can use the file api`` () =
+//        let f = System.IO.File.Open("/home/austin/foo",FileMode.OpenOrCreate,FileAccess.ReadWrite)
+//        f.Seek(10L, SeekOrigin.Begin)
+//        let buffer = Array.zeroCreate 100
+//        let doit = f.AsyncRead(buffer, 0, 100)
+//        let size = doit |> Async.RunSynchronously
+//        output.WriteLine("we read out size:{0}: {1}", size , Encoding.UTF8.GetString(buffer))
+//        f.Close
+//        
+//        Assert.True(true)
         
     
       
