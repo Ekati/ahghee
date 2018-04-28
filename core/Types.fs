@@ -68,6 +68,7 @@ type Either<'L, 'R> =
 type IStorage =
     abstract member Nodes: seq<Node>
     abstract member Add: seq<Node> -> System.Threading.Tasks.Task
+    abstract member Remove: seq<AddressBlock> -> System.Threading.Tasks.Task
     abstract member TryFind: seq<AddressBlock> -> System.Threading.Tasks.Task<seq<AddressBlock * Either<Node, Exception>>>
 
 type MemoryStore() =
@@ -77,6 +78,11 @@ type MemoryStore() =
         member this.Add (nodes:seq<Node>) = 
             _nodes <- Seq.append _nodes nodes
             Task.CompletedTask
+        member this.Remove (nodeIDs:seq<AddressBlock>) = 
+            _nodes <- _nodes |> Seq.filter (fun n -> 
+                                                    let head = n.NodeIDs |> Seq.head 
+                                                    nodeIDs |> Seq.contains head |> not)
+            Task.CompletedTask    
         member this.TryFind (addresses:seq<AddressBlock>) =
             let matches = addresses |> Seq.map (fun addr -> 
                                                 match addr with 
@@ -93,4 +99,5 @@ type MemoryStore() =
 type Graph(storage:IStorage) =  
     member x.Nodes = storage.Nodes
     member x.Add (nodes:seq<Node>) = storage.Add nodes
+    member x.Remove (nodes:seq<AddressBlock>) = storage.Remove nodes
     member x.TryFind (addressBlock:seq<AddressBlock>) = storage.TryFind addressBlock                       
