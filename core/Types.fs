@@ -2,21 +2,13 @@ namespace Ahghee
 
 open System
 
-type NodeIRI = { Root: string; Database: string; NodeId: string; RouteKey: Option<string> }
+type NodeIRI = { Domain: string; Database: string; NodeId: string; RouteKey: Option<string> }
+type MimeBytes = { Mime: Option<string>; Bytes : Byte[] }
 
-type IRI =
+type Data =
   | InternalIRI of NodeIRI
   | ExternalIRI of System.Uri
+  | Binary of MimeBytes
 
-type Data = { Mimi: Option<string>; Bytes : Byte[] }
-
-type PairKey =
-  | IRI
-  | Data
-
-type PairValue =
-  | IRI
-  | Data
-
-type Pair = { Key: PairKey; Value : PairValue[] }
+type Pair = { Key: Data; Value : Data[] }
 type Node = { NodeIds: NodeIRI[]; Attributes: Pair[] }
