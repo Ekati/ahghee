@@ -113,19 +113,23 @@ module Utils =
     let mimeXmlInt = Some("xs:int")
     let mimeXmlDouble = Some("xs:double")
     
-    let BBString (text:string) = BinaryBlock (MimeBytes { Mime = mimePlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) })
-    let BBInt (value:int) = BinaryBlock (MimeBytes { Mime = mimeXmlInt ; Bytes = BitConverter.GetBytes value })
-    let BBDouble (value:double) = BinaryBlock (MimeBytes { Mime = mimeXmlDouble ; Bytes = BitConverter.GetBytes value })
-        
+    let ABTestId id = AddressBlock.NodeID { Domain = "biggraph://example.com"; Database="test"; Graph="People"; NodeId=id; RouteKey= None}
+    let BBString (text:string) = BinaryBlock.MimeBytes { Mime = mimePlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) }
+    let BBInt (value:int) = BinaryBlock.MimeBytes { Mime = mimeXmlInt ; Bytes = BitConverter.GetBytes value }
+    let BBDouble (value:double) = BinaryBlock.MimeBytes { Mime = mimeXmlDouble ; Bytes = BitConverter.GetBytes value }
+    
+    let DABTestId id = Data.AddressBlock (ABTestId id)    
+    let DBBString (text:string) = Data.BinaryBlock (BBString text)
+    let DBBInt (value:int) = Data.BinaryBlock (BBInt value)
+    let DBBDouble (value:double) = Data.BinaryBlock (BBDouble value)
     let Prop (key:Data) (values:seq<Data>) =
         let pair =  { KeyValue.Key = key; Value = (values |> Seq.toArray)}   
         pair  
         
-    let PropString (key:string) (values:seq<string>) = Prop (BBString key) (values |> Seq.map(fun x -> BBString x))  
-    let PropInt (key:string) (values:seq<int>) = Prop (BBString key) (values |> Seq.map(fun x -> BBInt x))
-    let PropDouble (key:string) (values:seq<double>) = Prop (BBString key) (values |> Seq.map(fun x -> BBDouble x))
-    let PropData (key:string) (values:seq<Data>) = Prop (BBString key) values
-    let TestId id = AddressBlock.NodeID { Domain = "biggraph://example.com"; Database="test"; Graph="People"; NodeId=id; RouteKey= None}
+    let PropString (key:string) (values:seq<string>) = Prop (DBBString key) (values |> Seq.map(fun x -> DBBString x))  
+    let PropInt (key:string) (values:seq<int>) = Prop (DBBString key) (values |> Seq.map(fun x -> DBBInt x))
+    let PropDouble (key:string) (values:seq<double>) = Prop (DBBString key) (values |> Seq.map(fun x -> DBBDouble x))
+    let PropData (key:string) (values:seq<Data>) = Prop (DBBString key) values
     
 module TinkerPop =
     open Utils
@@ -193,6 +197,19 @@ module TinkerPop =
                                                             MimeBytes.Mime= valueMime
                                                             Bytes= valueBytes})]
                         }
-                    )    
+                    )
+                    |> Seq.append (TheCrew.Value.Graph.Edges
+                                     |> Seq.ofArray
+                                     |> Seq.filter (fun e -> e.Source = n.Id)
+                                     |> Seq.map (fun e -> 
+                                                    {
+                                                        KeyValue.Key = DBBString (e.Datas 
+                                                                                 |> Seq.find (fun d -> d.Key = "labelE")
+                                                                                 |> (fun d -> d.String.Value)
+                                                                                 );
+                                                        Value = [DABTestId (e.Id.ToString())]
+                                                    }                         
+                                                 )
+                                     )  
              }
         )

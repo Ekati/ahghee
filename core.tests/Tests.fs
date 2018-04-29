@@ -19,7 +19,7 @@ open FSharp.Data
 type MyTests(output:ITestOutputHelper) =
     [<Fact>]
     member __.``Can create an InternalIRI type`` () =
-        let id = Data.AddressBlock ( TestId "1" ) 
+        let id = Data.AddressBlock ( ABTestId "1" ) 
         let success = match id with 
                         | Data.AddressBlock(AddressBlock.NodeID nodeid) -> true
                         | Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> true
@@ -51,7 +51,7 @@ type MyTests(output:ITestOutputHelper) =
     [<Fact>]
     member __.``Can create a Node`` () =
         let node = { 
-                    Node.NodeIDs = [| TestId "1" |] 
+                    Node.NodeIDs = [| ABTestId "1" |] 
                     Node.Attributes = [|
                                         PropString "firstName" [|"Richard"; "Dick"|] 
                                       |]
@@ -64,26 +64,26 @@ type MyTests(output:ITestOutputHelper) =
     
     member __.buildNodes : seq<Node> = 
         let node1 = { 
-                    Node.NodeIDs = [| TestId "1" |] 
+                    Node.NodeIDs = [| ABTestId "1" |] 
                     Node.Attributes = [|
                                         PropString "firstName" [|"Richard"; "Dick"|] 
-                                        PropData "follows" [| Data.AddressBlock (TestId "2") |] 
+                                        PropData "follows" [| DABTestId "2" |] 
                                       |]
                    }
                    
         let node2 = { 
-                    Node.NodeIDs = [| TestId "2" |] 
+                    Node.NodeIDs = [| ABTestId "2" |] 
                     Node.Attributes = [|
                                         PropString "firstName" [|"Sam"; "Sammy"|] 
-                                        PropData "follows" [| Data.AddressBlock (TestId "1") |]
+                                        PropData "follows" [| DABTestId "1" |]
                                       |]
                    }
                    
         let node3 = { 
-                    Node.NodeIDs = [| TestId "3" |] 
+                    Node.NodeIDs = [| ABTestId "3" |] 
                     Node.Attributes = [|
                                         PropString "firstName" [|"Jim"|]
-                                        PropData "follows" [| Data.AddressBlock (TestId "1"); Data.AddressBlock (TestId "2") |] 
+                                        PropData "follows" [| DABTestId "1"; DABTestId "2" |] 
                                       |]
                    }      
         [| node1; node2; node3 |]      
@@ -98,6 +98,16 @@ type MyTests(output:ITestOutputHelper) =
         match task.Status with
         | TaskStatus.Created -> task.Start()
         | _ -> ()                                                                     
+        task.Wait()
+        g
+        
+    member __.toyGraph : Graph =
+        let g:Graph = new Graph(new MemoryStore())
+        let nodes = buildNodesTheCrew
+        let task = g.Add nodes
+        match task.Status with
+             | TaskStatus.Created -> task.Start()
+             | _ -> ()                                                                     
         task.Wait()
         g
 
@@ -156,13 +166,7 @@ type MyTests(output:ITestOutputHelper) =
     
     [<Fact>] 
     member __.``Can get IDs after load tinkerpop-crew.xml into graph`` () =
-         let g:Graph = new Graph(new MemoryStore())
-         let nodes = buildNodesTheCrew
-         let task = g.Add nodes
-         match task.Status with
-             | TaskStatus.Created -> task.Start()
-             | _ -> ()                                                                     
-         task.Wait()
+         let g:Graph = __.toyGraph
                   
          output.WriteLine("g.Nodes length: {0}", g.Nodes |> Seq.length )
          
@@ -191,7 +195,7 @@ type MyTests(output:ITestOutputHelper) =
                                                                  | _ -> false
                                                     )
                                       |> Seq.map    (fun attr -> n, attr) 
-                                      |> Seq.collect (fun (n,attr) -> 
+                                      |> Seq.map (fun (n,attr) -> 
                                                     let _id = n.NodeIDs |> Seq.head |> (fun id -> match id with    
                                                                                   | NodeID(nid) -> nid.NodeId
                                                                                   | MemoryPointer(mp) -> "")  
@@ -200,28 +204,15 @@ type MyTests(output:ITestOutputHelper) =
                                                                  | BinaryBlock(MimeBytes mb) when mb.Mime = mimePlainTextUtf8 ->
                                                                         Encoding.UTF8.GetString mb.Bytes
                                                                  | _ -> ""
-                                                                 
-                                                    let values = attr.Value
-                                                                |> Seq.map (fun v -> match v with
-                                                                                     | BinaryBlock(MimeBytes mb) ->
-                                                                                          mb.Mime, mb.Bytes
-                                                                                     | _ -> None,Array.empty<byte> 
-                                                                           )                                                                                                           
-                                                    values 
-                                                    |> Seq.map (fun (at,v) -> _id,labelV,at,v)
+                                                                                                          
+                                                    _id,labelV,attr.Value |> List.ofSeq
                                                  )                                                           
                              )
              |> List.ofSeq
              
     [<Fact>] 
     member __.``Can get labelV after load tinkerpop-crew.xml into graph`` () =
-         let g:Graph = new Graph(new MemoryStore())
-         let nodes = buildNodesTheCrew
-         let task = g.Add nodes
-         match task.Status with
-             | TaskStatus.Created -> task.Start()
-             | _ -> ()                                                                     
-         task.Wait()
+         let g:Graph = __.toyGraph
                   
          output.WriteLine("g.Nodes length: {0}", g.Nodes |> Seq.length )
          
@@ -229,40 +220,70 @@ type MyTests(output:ITestOutputHelper) =
          let actual = __.CollectValues attrName g
                                        
          let expected = [ 
-                                "1",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "person";
-                                "2",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "person";
-                                "3",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "software";
-                                "4",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "person";
-                                "5",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "software";
-                                "6",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "person"; 
+                                "1",attrName, [DBBString "person"]
+                                "2",attrName, [DBBString "person"]
+                                "3",attrName, [DBBString "software"]
+                                "4",attrName, [DBBString "person"]
+                                "5",attrName, [DBBString "software"]
+                                "6",attrName, [DBBString "person"] 
                            ]
+                           
          output.WriteLine(sprintf "foundData: %A" actual)
          output.WriteLine(sprintf "expectedData: %A" expected)                           
-         Assert.Equal<string * string * Option<string> * byte[]>(expected,actual) 
+         Assert.Equal<string * string * list<Data>>(expected,actual) 
          
     [<Fact>] 
     member __.``After load tinkerpop-crew.xml Age has mime type int and comes out as int`` () =
-         let g:Graph = new Graph(new MemoryStore())
-         let nodes = buildNodesTheCrew
-         let task = g.Add nodes
-         match task.Status with
-             | TaskStatus.Created -> task.Start()
-             | _ -> ()                                                                     
-         task.Wait()
+         let g:Graph = __.toyGraph
                   
          output.WriteLine("g.Nodes length: {0}", g.Nodes |> Seq.length )
          let attrName = "age"
          let actual = __.CollectValues attrName g                                         
 
          let expected = [ 
-                        "1",attrName,mimeXmlInt, BitConverter.GetBytes 29;
-                        "2",attrName,mimeXmlInt, BitConverter.GetBytes 27;
-                        "4",attrName,mimeXmlInt, BitConverter.GetBytes 32;
-                        "6",attrName,mimeXmlInt, BitConverter.GetBytes 35; 
+                        "1",attrName, [DBBInt 29]
+                        "2",attrName, [DBBInt 27]
+                        "4",attrName, [DBBInt 32]
+                        "6",attrName, [DBBInt 35]
                         ]
          output.WriteLine(sprintf "foundData: %A" actual)
          output.WriteLine(sprintf "expectedData: %A" expected)
-         Assert.Equal<string * string * Option<string> * byte[]>(expected,actual)         
+         Assert.Equal<string * string * list<Data>>(expected,actual)         
+
+    [<Fact>] 
+    member __.``After load tinkerpop-crew.xml Nodes have knows Edges`` () =
+        let g:Graph = __.toyGraph
+              
+        let attrName = "knows"
+        let actual = __.CollectValues attrName g                                         
+        
+        let expected = [ 
+                    "1",attrName, [DABTestId "7"]
+                    "1",attrName, [DABTestId "8"]
+                    ]
+        output.WriteLine(sprintf "foundData: %A" actual)
+        output.WriteLine(sprintf "expectedData: %A" expected)
+        Assert.Equal<string * string * list<Data>>(expected,actual)
+        
+    [<Fact>] 
+    member __.``After load tinkerpop-crew.xml Nodes have created Edges`` () =        
+        let g:Graph = __.toyGraph
+        let attrName = "created"
+        let actual = __.CollectValues attrName g                                         
+        
+        let expected = [ 
+                     "1",attrName, [DABTestId "9"]
+                     "4",attrName, [DABTestId "10"]
+                     "4",attrName, [DABTestId "11"]
+                     "6",attrName, [DABTestId "12"]
+                     ]
+        output.WriteLine(sprintf "foundData: %A" actual)
+        output.WriteLine(sprintf "expectedData: %A" expected)
+        Assert.Equal<string * string * list<Data>>(expected,actual)
+    
+         
+         
+         
 
 //    [<Fact>]
 //    member __.``I can use the file api`` () =
