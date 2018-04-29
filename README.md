@@ -34,8 +34,9 @@ I'm looking for other contributors to help.
 - DevOps
 
 ### High level strategy
-- Etcd for cluster registry
-- Use a Log structured merge approach (like rocksdb)
+- [Etcd](https://coreos.com/etcd/docs/latest/) for cluster registry
+- [gRPC](https://grpc.io/docs/quickstart/csharp.html) for RPC 
+- Use a [Log structured merge approach](http://www.cs.utexas.edu/~vijay/papers/sosp17-pebblesdb.pdf)
 - Cluster-nodes form a network where they only talk to a few other cluster-nodes
 - Metrics about which cluster-nodes ultimatly receive data from other cluster-nodes used modify the network
 - NeuralNetwork node+query classification used for balancing graph-nodes on the network
