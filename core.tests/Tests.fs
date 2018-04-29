@@ -22,7 +22,7 @@ type MyTests(output:ITestOutputHelper) =
         let id = Data.AddressBlock ( ABTestId "1" ) 
         let success = match id with 
                         | Data.AddressBlock(AddressBlock.NodeID nodeid) -> true
-                        | Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> true
+                        //| Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> true
                         | Data.BinaryBlock(BinaryBlock.MimeBytes data) -> false
                         | Data.BinaryBlock(BinaryBlock.MemoryPointer pointer) -> false   
         Assert.True(success)  
@@ -32,7 +32,7 @@ type MyTests(output:ITestOutputHelper) =
         let d : Data = BinaryBlock ( MimeBytes { MimeBytes.Mime= mimePlainTextUtf8; MimeBytes.Bytes = Array.Empty<byte>() } )
         let success = match d with 
                         | Data.AddressBlock(AddressBlock.NodeID nodeId) -> false
-                        | Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> false
+                        //| Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> false
                         | Data.BinaryBlock(BinaryBlock.MimeBytes data) -> true
                         | Data.BinaryBlock(BinaryBlock.MemoryPointer pointer) -> true
         Assert.True success   
@@ -170,21 +170,23 @@ type MyTests(output:ITestOutputHelper) =
                   
          output.WriteLine("g.Nodes length: {0}", g.Nodes |> Seq.length )
          
-         let loadedIds = g.Nodes
+         let actual = g.Nodes
                          |> Seq.collect (fun n -> n.NodeIDs)
                          |> Seq.map (fun id -> match id with    
                                                | NodeID(nid) -> Some(nid.NodeId)
-                                               | MemoryPointer(mp) -> None)  
+                                               //| MemoryPointer(mp) -> None
+                                               )  
                          |> Seq.filter (fun x -> x.IsSome)
                          |> Seq.map (fun x -> x.Value)        
+                         |> Seq.sort
                          
-         output.WriteLine("loadedIds: {0}", loadedIds |> String.concat " ")
+         output.WriteLine("loadedIds: {0}", actual |> String.concat " ")
                                        
-         let expectedIds = [| 1;2;3;4;5;6; |] 
-                           |> Array.toSeq 
+         let expectedIds = seq { 1 .. 12 }
                            |> Seq.map (fun n -> n.ToString())
+                           |> Seq.sort 
                            
-         Assert.Equal<string>(expectedIds,loadedIds)                             
+         Assert.Equal<string>(expectedIds,actual)                             
 
     member __.CollectValues key (graph:Graph) =
         graph.Nodes
@@ -198,7 +200,8 @@ type MyTests(output:ITestOutputHelper) =
                                       |> Seq.map (fun (n,attr) -> 
                                                     let _id = n.NodeIDs |> Seq.head |> (fun id -> match id with    
                                                                                   | NodeID(nid) -> nid.NodeId
-                                                                                  | MemoryPointer(mp) -> "")  
+                                                                                  //| MemoryPointer(mp) -> ""
+                                                                                  )  
                                                                                   
                                                     let labelV = match attr.Key with 
                                                                  | BinaryBlock(MimeBytes mb) when mb.Mime = mimePlainTextUtf8 ->
@@ -322,7 +325,24 @@ type MyTests(output:ITestOutputHelper) =
         output.WriteLine(sprintf "expectedData: %A" expected)
         Assert.Equal<string * string * list<Data>>(expected,actual)
          
-         
+    [<Fact>] 
+    member __.``After load tinkerpop-crew.xml has Edge-nodes`` () =        
+        let g:Graph = __.toyGraph
+        let attrName = "labelE"
+        let actual = __.CollectValues attrName g                                       
+        
+        let expected = [ 
+                         "7",attrName, [DBBString "knows"]
+                         "8",attrName, [DBBString "knows"]
+                         "9",attrName, [DBBString "created"]
+                         "10",attrName, [DBBString "created"]
+                         "11",attrName, [DBBString "created"]
+                         "12",attrName, [DBBString "created"]
+                       ] 
+                     
+        output.WriteLine(sprintf "foundData: %A" actual)
+        output.WriteLine(sprintf "expectedData: %A" expected)
+        Assert.Equal<string * string * list<Data>>(expected,actual)         
          
 
 //    [<Fact>]

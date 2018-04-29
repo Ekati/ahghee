@@ -44,6 +44,7 @@ type NodeID = {
     Graph: string; 
     NodeId: string; 
     RouteKey: Option<string>
+    Pointer: Option<MemoryPointer>
     } 
      
 type BinaryBlock =
@@ -52,7 +53,6 @@ type BinaryBlock =
 
 type AddressBlock =
     | NodeID of NodeID
-    | MemoryPointer of MemoryPointer
 
 type Data =
   | AddressBlock of AddressBlock
@@ -93,7 +93,7 @@ type MemoryStore() =
                                                                 match isLocal with 
                                                                 | Some node -> (addr, Left(node))
                                                                 | None -> (addr, Right (Failure "remote nodes not supported yet"))
-                                                | MemoryPointer(pointer) -> (addr, Right (Failure  "MemoryPointer not supported yet")) 
+                                                //| MemoryPointer(pointer) -> (addr, Right (Failure  "MemoryPointer not supported yet")) 
                                                 )
             Task.FromResult matches      
         member this.First (predicate: (Node -> bool)) : System.Threading.Tasks.Task<Option<Node>> =
@@ -113,7 +113,7 @@ module Utils =
     let mimeXmlInt = Some("xs:int")
     let mimeXmlDouble = Some("xs:double")
     
-    let ABTestId id = AddressBlock.NodeID { Domain = "biggraph://example.com"; Database="test"; Graph="People"; NodeId=id; RouteKey= None}
+    let ABTestId id = AddressBlock.NodeID { Domain = "biggraph://example.com"; Database="test"; Graph="People"; NodeId=id; RouteKey= None; Pointer=None;}
     let BBString (text:string) = BinaryBlock.MimeBytes { Mime = mimePlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) }
     let BBInt (value:int) = BinaryBlock.MimeBytes { Mime = mimeXmlInt ; Bytes = BitConverter.GetBytes value }
     let BBDouble (value:double) = BinaryBlock.MimeBytes { Mime = mimeXmlDouble ; Bytes = BitConverter.GetBytes value }
@@ -157,72 +157,146 @@ module TinkerPop =
         let NodeAttrs = attrs "node" 
         let EdgeAttrs = attrs "edge" 
         
-        let Id id = AddressBlock.NodeID { Domain = "biggraph://ahghee.com"; Database="TinkerPop"; Graph="TheCrew"; NodeId=id; RouteKey= None}
+        let Id id = AddressBlock.NodeID { Domain = "biggraph://ahghee.com"; Database="TinkerPop"; Graph="TheCrew"; NodeId=id; RouteKey= None; Pointer=None;}
         
-        TheCrew.Value.Graph.Nodes 
-        |> Seq.map (fun n -> 
-             { 
-                Node.NodeIDs = [| Id (n.Id.ToString()) |];  
-                Node.Attributes = 
-                    n.Datas
-                    |> Seq.ofArray
-                    |> Seq.map (fun d ->
-                        let keyBytes = 
-                            let (name, typ) = NodeAttrs.Item d.Key
-                            Encoding.UTF8.GetBytes name
-                        
-                        let valueMime =
-                            let (name, typ) = NodeAttrs.Item d.Key 
-                            xsType typ
-                        
-                        let valueBytes =
-                            match valueMime with
-                            | m when m = mimePlainTextUtf8 -> match d.String with  
-                                                   | Some(s) -> Encoding.UTF8.GetBytes s
-                                                   | _ -> Array.empty<byte>
-                            | m when m = mimeXmlDouble -> match d.String with  
-                                               | Some(s) -> BitConverter.GetBytes (double s)
-                                               | _ -> Array.empty<byte>
-                            | m when m = mimeXmlInt -> match d.String with  
-                                            | Some(s) -> BitConverter.GetBytes (int32 s)
-                                            | _ -> Array.empty<byte>
-                            | _ -> Array.empty<byte>                                                                                    
-                        
-                        { 
-                            KeyValue.Key= BinaryBlock (MimeBytes {
-                                                                MimeBytes.Mime= mimePlainTextUtf8;
-                                                                Bytes= keyBytes
-                                                                     })
-                            Value= [BinaryBlock (MimeBytes {
-                                                            MimeBytes.Mime= valueMime
-                                                            Bytes= valueBytes})]
-                        }
-                    )
-                    |> Seq.append (TheCrew.Value.Graph.Edges
-                                     |> Seq.ofArray
-                                     |> Seq.filter (fun e -> e.Source = n.Id)
-                                     |> Seq.map (fun e -> 
-                                                    {
-                                                        KeyValue.Key = DBBString (e.Datas 
-                                                                                 |> Seq.find (fun d -> d.Key = "labelE")
-                                                                                 |> (fun d -> "out." + d.String.Value)
-                                                                                 );
-                                                        Value = [DABTestId (e.Id.ToString())]
-                                                    }                         
-                                                 )
-                                     ) 
-                    |> Seq.append (TheCrew.Value.Graph.Edges
-                                     |> Seq.ofArray
-                                     |> Seq.filter (fun e -> e.Target = n.Id)
-                                     |> Seq.map (fun e -> 
-                                                    {
-                                                        KeyValue.Key = DBBString (e.Datas 
-                                                                                 |> Seq.find (fun d -> d.Key = "labelE")
-                                                                                 |> (fun d -> "in." + d.String.Value)
-                                                                                 );
-                                                        Value = [DABTestId (e.Id.ToString())]
-                                                    }                         
-                                                 )
-                                     )                  
-             }
-        )
+        let buildNodesFromGraphMlNodes (nodes:seq<GraphML.Node>) (edges:seq<GraphML.Edge>) = 
+            nodes
+            |> Seq.map (fun n -> 
+                     { 
+                        Node.NodeIDs = [| Id (n.Id.ToString()) |];  
+                        Node.Attributes = 
+                            n.Datas
+                            |> Seq.ofArray
+                            |> Seq.map (fun d ->
+                                let keyBytes = 
+                                    let (name, typ) = NodeAttrs.Item d.Key
+                                    Encoding.UTF8.GetBytes name
+                                
+                                let valueMime =
+                                    let (name, typ) = NodeAttrs.Item d.Key 
+                                    xsType typ
+                                
+                                let valueBytes =
+                                    match valueMime with
+                                    | m when m = mimePlainTextUtf8 -> match d.String with  
+                                                           | Some(s) -> Encoding.UTF8.GetBytes s
+                                                           | _ -> Array.empty<byte>
+                                    | m when m = mimeXmlDouble -> match d.String with  
+                                                       | Some(s) -> BitConverter.GetBytes (double s)
+                                                       | _ -> Array.empty<byte>
+                                    | m when m = mimeXmlInt -> match d.String with  
+                                                    | Some(s) -> BitConverter.GetBytes (int32 s)
+                                                    | _ -> Array.empty<byte>
+                                    | _ -> Array.empty<byte>                                                                                    
+                                
+                                { 
+                                    KeyValue.Key= BinaryBlock (MimeBytes {
+                                                                        MimeBytes.Mime= mimePlainTextUtf8;
+                                                                        Bytes= keyBytes
+                                                                             })
+                                    Value= [BinaryBlock (MimeBytes {
+                                                                    MimeBytes.Mime= valueMime
+                                                                    Bytes= valueBytes})]
+                                }
+                            )
+                            |> Seq.append (edges
+                                             |> Seq.filter (fun e -> e.Source = n.Id)
+                                             |> Seq.map (fun e -> 
+                                                            {
+                                                                KeyValue.Key = DBBString (e.Datas 
+                                                                                         |> Seq.find (fun d -> d.Key = "labelE")
+                                                                                         |> (fun d -> "out." + d.String.Value)
+                                                                                         );
+                                                                Value = [DABTestId (e.Id.ToString())]
+                                                            }                         
+                                                         )
+                                             ) 
+                            |> Seq.append (edges
+                                             |> Seq.filter (fun e -> e.Target = n.Id)
+                                             |> Seq.map (fun e -> 
+                                                            {
+                                                                KeyValue.Key = DBBString (e.Datas 
+                                                                                         |> Seq.find (fun d -> d.Key = "labelE")
+                                                                                         |> (fun d -> "in." + d.String.Value)
+                                                                                         );
+                                                                Value = [DABTestId (e.Id.ToString())]
+                                                            }                         
+                                                         )
+                                             )                  
+                     }
+                )
+                
+        let buildEdgeNodesFromGraphMlEdges (edges:seq<GraphML.Edge>) = 
+            edges
+            |> Seq.map (fun n -> 
+                     { 
+                        Node.NodeIDs = [| Id (n.Id.ToString()) |];  
+                        Node.Attributes = 
+                            n.Datas
+                            |> Seq.ofArray
+                            |> Seq.map (fun d ->
+                                let keyBytes = 
+                                    let (name, typ) = EdgeAttrs.Item d.Key
+                                    Encoding.UTF8.GetBytes name
+                                
+                                let valueMime =
+                                    let (name, typ) = EdgeAttrs.Item d.Key 
+                                    xsType typ
+                                
+                                let valueBytes =
+                                    match valueMime with
+                                    | m when m = mimePlainTextUtf8 -> match d.String with  
+                                                           | Some(s) -> Encoding.UTF8.GetBytes s
+                                                           | _ -> Array.empty<byte>
+                                    | m when m = mimeXmlDouble -> match d.String with  
+                                                       | Some(s) -> BitConverter.GetBytes (double s)
+                                                       | _ -> Array.empty<byte>
+                                    | m when m = mimeXmlInt -> match d.String with  
+                                                    | Some(s) -> BitConverter.GetBytes (int32 s)
+                                                    | _ -> Array.empty<byte>
+                                    | _ -> Array.empty<byte>                                                                                    
+                                
+                                { 
+                                    KeyValue.Key= BinaryBlock (MimeBytes {
+                                                                        MimeBytes.Mime= mimePlainTextUtf8;
+                                                                        Bytes= keyBytes
+                                                                             })
+                                    Value= [BinaryBlock (MimeBytes {
+                                                                    MimeBytes.Mime= valueMime
+                                                                    Bytes= valueBytes})]
+                                }
+                            )
+                            |> Seq.append (edges
+                                             |> Seq.filter (fun e -> e.Source = n.Id)
+                                             |> Seq.map (fun e -> 
+                                                            {
+                                                                KeyValue.Key = DBBString (e.Datas 
+                                                                                         |> Seq.find (fun d -> d.Key = "labelE")
+                                                                                         |> (fun d -> "out." + d.String.Value)
+                                                                                         );
+                                                                Value = [DABTestId (e.Id.ToString())]
+                                                            }                         
+                                                         )
+                                             ) 
+                            |> Seq.append (edges
+                                             |> Seq.filter (fun e -> e.Target = n.Id)
+                                             |> Seq.map (fun e -> 
+                                                            {
+                                                                KeyValue.Key = DBBString (e.Datas 
+                                                                                         |> Seq.find (fun d -> d.Key = "labelE")
+                                                                                         |> (fun d -> "in." + d.String.Value)
+                                                                                         );
+                                                                Value = [DABTestId (e.Id.ToString())]
+                                                            }                         
+                                                         )
+                                             )
+                            |> Seq.append ( [ 
+                                                { KeyValue.Key= DBBString "source"; Value= [DABTestId (n.Source.ToString())]}
+                                                { KeyValue.Key= DBBString "target"; Value= [DABTestId (n.Target.ToString())]}
+                                            ] )          
+                     }
+                )
+        
+        buildNodesFromGraphMlNodes TheCrew.Value.Graph.Nodes TheCrew.Value.Graph.Edges
+        |> Seq.append (buildEdgeNodesFromGraphMlEdges TheCrew.Value.Graph.Edges)
+        
