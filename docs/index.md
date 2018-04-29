@@ -1,37 +1,40 @@
-## Welcome to GitHub Pages
+# Ahghee - The Big Graph Database
 
-You can use the [editor on GitHub](https://github.com/Astn/ahghee/edit/master/docs/index.md) to maintain and preview the content for your website in Markdown files.
+I'm looking for other contributors to help.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+## Design goals
 
-### Markdown
+- Massive graphs (Trillions of nodes)
+- Write friendly (like Cassandra)
+- Elastic scaling
+- Masterless clustering
+- Adaptive topology layout
+- Fast (Millions of graph-node steps per second per server)
+- Tinkerpop or a variation of Tinkerpop
+- Cypher or a variation of Cypher
+- Index-free adjancecy traversal
+- Custom indexing
+- Automatic adaptive indexing
+- Storage local compute
+- Large value support
+- Standing queries 
+- Virtual sub-graph
+- Pluggable storage providers
+- Pluggable query providers
+- Dotnet core embedding
+- Cross platform
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+## Approach
+- TDD
+- Functional Programming
+- DevOps
 
-```markdown
-Syntax highlighted code block
-
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/Astn/ahghee/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+### High level strategy
+- Etcd for cluster registry
+- Use a Log structured merge approach (like rocksdb)
+- Cluster-nodes form a network where they only talk to a few other cluster-nodes
+- Metrics about which cluster-nodes ultimatly receive data from other cluster-nodes used modify the network
+- NeuralNetwork node+query classification used for balancing graph-nodes on the network
+- A new cluster-node should be able to join the cluster just by authenticating with any cluster-node
+- Gateway nodes should be able to join multiple clusters to form a WAN cluster
+- Gateway nodes can control the flow of data between clusters (read/write/one-way)
