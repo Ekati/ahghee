@@ -4,6 +4,8 @@ open System
 open Xunit
 open Xunit.Abstractions
 open Ahghee
+open Ahghee.Utils
+open Ahghee.TinkerPop
 open System
 open System.Collections
 open System.IO
@@ -11,32 +13,13 @@ open System.Text
 open System.Threading.Tasks
 open FSharp.Data
 
-let mimePlainTextUtf8 = Some("xs:string")
-let mimeXmlInt = Some("xs:int")
-let mimeXmlDouble = Some("xs:double")
+  
 
-let BStr (text:string) = BinaryBlock (MimeBytes { Mime = mimePlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) })
-    
-let Prop (key:Data) (values:seq<Data>) =
-    let pair =  { KeyValue.Key = key; Value = (values |> Seq.toArray)}   
-    pair  
-    
-let PropStr (key:string) (values:seq<string>) = Prop (BStr key) (values |> Seq.map(fun x -> BStr x))  
-let PropStrData (key:string) (values:seq<Data>) = Prop (BStr key) values      
-
-type GraphML = XmlProvider<"""https://raw.githubusercontent.com/apache/tinkerpop/master/data/tinkerpop-modern.xml""">
 
 type MyTests(output:ITestOutputHelper) =
-
-    let TheCrew = GraphML.Load("https://raw.githubusercontent.com/apache/tinkerpop/master/data/tinkerpop-modern.xml")
-
-    
-    let Id id = AddressBlock.NodeID { Domain = "biggraph://example.com"; Database="test"; Graph="People"; NodeId=id; RouteKey= None} 
-    let TestCreateBinary = MimeBytes { MimeBytes.Mime= Some("application/json"); MimeBytes.Bytes = Array.Empty<byte>() } 
-    
     [<Fact>]
     member __.``Can create an InternalIRI type`` () =
-        let id = Data.AddressBlock ( Id "1" ) 
+        let id = Data.AddressBlock ( TestId "1" ) 
         let success = match id with 
                         | Data.AddressBlock(AddressBlock.NodeID nodeid) -> true
                         | Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> true
@@ -46,7 +29,7 @@ type MyTests(output:ITestOutputHelper) =
         
     [<Fact>]
     member __.``Can create a Binary type`` () =
-        let d : Data = BinaryBlock TestCreateBinary
+        let d : Data = BinaryBlock ( MimeBytes { MimeBytes.Mime= mimePlainTextUtf8; MimeBytes.Bytes = Array.Empty<byte>() } )
         let success = match d with 
                         | Data.AddressBlock(AddressBlock.NodeID nodeId) -> false
                         | Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> false
@@ -58,7 +41,7 @@ type MyTests(output:ITestOutputHelper) =
         
     [<Fact>]
     member __.``Can create a Pair`` () =
-        let pair = PropStr "firstName" [|"Richard"; "Dick"|]
+        let pair = PropString "firstName" [|"Richard"; "Dick"|]
     
         let success = match pair.Key with 
                         | BinaryBlock (MimeBytes b) when b.Mime.IsSome && b.Mime.Value = mimePlainTextUtf8.Value -> true 
@@ -68,9 +51,9 @@ type MyTests(output:ITestOutputHelper) =
     [<Fact>]
     member __.``Can create a Node`` () =
         let node = { 
-                    Node.NodeIDs = [| Id "1" |] 
+                    Node.NodeIDs = [| TestId "1" |] 
                     Node.Attributes = [|
-                                        PropStr "firstName" [|"Richard"; "Dick"|] 
+                                        PropString "firstName" [|"Richard"; "Dick"|] 
                                       |]
                    }
     
@@ -81,90 +64,32 @@ type MyTests(output:ITestOutputHelper) =
     
     member __.buildNodes : seq<Node> = 
         let node1 = { 
-                    Node.NodeIDs = [| Id "1" |] 
+                    Node.NodeIDs = [| TestId "1" |] 
                     Node.Attributes = [|
-                                        PropStr "firstName" [|"Richard"; "Dick"|] 
-                                        PropStrData "follows" [| Data.AddressBlock (Id "2") |] 
+                                        PropString "firstName" [|"Richard"; "Dick"|] 
+                                        PropData "follows" [| Data.AddressBlock (TestId "2") |] 
                                       |]
                    }
                    
         let node2 = { 
-                    Node.NodeIDs = [| Id "2" |] 
+                    Node.NodeIDs = [| TestId "2" |] 
                     Node.Attributes = [|
-                                        PropStr "firstName" [|"Sam"; "Sammy"|] 
-                                        PropStrData "follows" [| Data.AddressBlock (Id "1") |]
+                                        PropString "firstName" [|"Sam"; "Sammy"|] 
+                                        PropData "follows" [| Data.AddressBlock (TestId "1") |]
                                       |]
                    }
                    
         let node3 = { 
-                    Node.NodeIDs = [| Id "3" |] 
+                    Node.NodeIDs = [| TestId "3" |] 
                     Node.Attributes = [|
-                                        PropStr "firstName" [|"Jim"|]
-                                        PropStrData "follows" [| Data.AddressBlock (Id "1"); Data.AddressBlock (Id "2") |] 
+                                        PropString "firstName" [|"Jim"|]
+                                        PropData "follows" [| Data.AddressBlock (TestId "1"); Data.AddressBlock (TestId "2") |] 
                                       |]
                    }      
         [| node1; node2; node3 |]      
         |> Array.toSeq             
     
-    member __.xsType graphMlType : Option<string> =
-                match graphMlType with
-                | "string" -> mimePlainTextUtf8
-                | "int" -> mimeXmlInt
-                | "double" -> mimeXmlDouble
-                | _ -> None
     
-    member __.buildNodesTheCrew : seq<Node> =
-        let attrs forType= 
-            TheCrew.Keys 
-            |> Seq.ofArray
-            |> Seq.filter (fun k -> k.For = forType)
-            |> Seq.map (fun k -> k.Id, (k.AttrName, k.AttrType))
-            |> Map.ofSeq
-        let NodeAttrs = attrs "node" 
-        let EdgeAttrs = attrs "edge" 
-        
-        
-                                
-        TheCrew.Graph.Nodes 
-        |> Seq.map (fun n -> 
-                             { 
-                                Node.NodeIDs = [| Id (n.Id.ToString()) |];  
-                                Node.Attributes = n.Datas
-                                                  |> Seq.ofArray
-                                                  |> Seq.map (fun d ->
-                                                                let keyBytes = 
-                                                                    let (name, typ) = NodeAttrs.Item d.Key
-                                                                    Encoding.UTF8.GetBytes name
-                                                                
-                                                                let valueMime =
-                                                                    let (name, typ) = NodeAttrs.Item d.Key 
-                                                                    __.xsType typ
-                                                                
-                                                                let valueBytes =
-                                                                    match valueMime with
-                                                                    | m when m = mimePlainTextUtf8 -> match d.String with  
-                                                                                           | Some(s) -> Encoding.UTF8.GetBytes s
-                                                                                           | _ -> Array.empty<byte>
-                                                                    | m when m = mimeXmlDouble -> match d.String with  
-                                                                                       | Some(s) -> BitConverter.GetBytes (double s)
-                                                                                       | _ -> Array.empty<byte>
-                                                                    | m when m = mimeXmlInt -> match d.String with  
-                                                                                    | Some(s) -> BitConverter.GetBytes (int32 s)
-                                                                                    | _ -> Array.empty<byte>
-                                                                    | _ -> Array.empty<byte>                                                                                    
-                                                                
-                                                                { 
-                                                                    KeyValue.Key= BinaryBlock (MimeBytes {
-                                                                                                        MimeBytes.Mime= mimePlainTextUtf8;
-                                                                                                        Bytes= keyBytes
-                                                                                                             })
-                                                                    Value= [BinaryBlock (MimeBytes {
-                                                                                                    MimeBytes.Mime= valueMime
-                                                                                                    Bytes= valueBytes})]
-                                                                }
-                                                             )    
-                             }
-                    )
     
     member __.buildGraph : Graph =
         let g:Graph = new Graph(new MemoryStore())
@@ -232,7 +157,7 @@ type MyTests(output:ITestOutputHelper) =
     [<Fact>] 
     member __.``Can get IDs after load tinkerpop-crew.xml into graph`` () =
          let g:Graph = new Graph(new MemoryStore())
-         let nodes = __.buildNodesTheCrew
+         let nodes = buildNodesTheCrew
          let task = g.Add nodes
          match task.Status with
              | TaskStatus.Created -> task.Start()
@@ -260,7 +185,7 @@ type MyTests(output:ITestOutputHelper) =
     [<Fact>] 
     member __.``Can get labelV after load tinkerpop-crew.xml into graph`` () =
          let g:Graph = new Graph(new MemoryStore())
-         let nodes = __.buildNodesTheCrew
+         let nodes = buildNodesTheCrew
          let task = g.Add nodes
          match task.Status with
              | TaskStatus.Created -> task.Start()
@@ -346,7 +271,7 @@ type MyTests(output:ITestOutputHelper) =
     [<Fact>] 
     member __.``After load tinkerpop-crew.xml Age has mime type int and comes out as int`` () =
          let g:Graph = new Graph(new MemoryStore())
-         let nodes = __.buildNodesTheCrew
+         let nodes = buildNodesTheCrew
          let task = g.Add nodes
          match task.Status with
              | TaskStatus.Created -> task.Start()
@@ -356,15 +281,13 @@ type MyTests(output:ITestOutputHelper) =
          output.WriteLine("g.Nodes length: {0}", g.Nodes |> Seq.length )
          let attrName = "age"
          let actual = __.CollectValues attrName g                                         
-              
-         
-                                       
+
          let expected = [ 
-                                "1",attrName,mimeXmlInt, BitConverter.GetBytes 29;
-                                "2",attrName,mimeXmlInt, BitConverter.GetBytes 27;
-                                "4",attrName,mimeXmlInt, BitConverter.GetBytes 32;
-                                "6",attrName,mimeXmlInt, BitConverter.GetBytes 35; 
-                           ]
+                        "1",attrName,mimeXmlInt, BitConverter.GetBytes 29;
+                        "2",attrName,mimeXmlInt, BitConverter.GetBytes 27;
+                        "4",attrName,mimeXmlInt, BitConverter.GetBytes 32;
+                        "6",attrName,mimeXmlInt, BitConverter.GetBytes 35; 
+                        ]
          output.WriteLine(sprintf "foundData: %A" actual)
          output.WriteLine(sprintf "expectedData: %A" expected)
          Assert.Equal<string * string * Option<string> * byte[]>(expected,actual)         

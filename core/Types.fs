@@ -101,3 +101,92 @@ type Graph(storage:IStorage) =
     member x.Add (nodes:seq<Node>) = storage.Add nodes
     member x.Remove (nodes:seq<AddressBlock>) = storage.Remove nodes
     member x.TryFind (addressBlock:seq<AddressBlock>) = storage.TryFind addressBlock                       
+
+module Utils =
+    let mimePlainTextUtf8 = Some("xs:string")
+    let mimeXmlInt = Some("xs:int")
+    let mimeXmlDouble = Some("xs:double")
+    
+    let BBString (text:string) = BinaryBlock (MimeBytes { Mime = mimePlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) })
+    let BBInt (value:int) = BinaryBlock (MimeBytes { Mime = mimeXmlInt ; Bytes = BitConverter.GetBytes value })
+    let BBDouble (value:double) = BinaryBlock (MimeBytes { Mime = mimeXmlDouble ; Bytes = BitConverter.GetBytes value })
+        
+    let Prop (key:Data) (values:seq<Data>) =
+        let pair =  { KeyValue.Key = key; Value = (values |> Seq.toArray)}   
+        pair  
+        
+    let PropString (key:string) (values:seq<string>) = Prop (BBString key) (values |> Seq.map(fun x -> BBString x))  
+    let PropInt (key:string) (values:seq<int>) = Prop (BBString key) (values |> Seq.map(fun x -> BBInt x))
+    let PropDouble (key:string) (values:seq<double>) = Prop (BBString key) (values |> Seq.map(fun x -> BBDouble x))
+    let PropData (key:string) (values:seq<Data>) = Prop (BBString key) values
+    let TestId id = AddressBlock.NodeID { Domain = "biggraph://example.com"; Database="test"; Graph="People"; NodeId=id; RouteKey= None}
+    
+module TinkerPop =
+    open Utils
+    open FSharp.Data
+    open System.Text
+    
+    type GraphML = XmlProvider<"""https://raw.githubusercontent.com/apache/tinkerpop/master/data/tinkerpop-modern.xml""">
+    let TheCrew = lazy ( GraphML.Load("https://raw.githubusercontent.com/apache/tinkerpop/master/data/tinkerpop-modern.xml") )
+
+    
+    let xsType graphMlType : Option<string> =
+        match graphMlType with
+        | "string" -> mimePlainTextUtf8
+        | "int" -> mimeXmlInt
+        | "double" -> mimeXmlDouble
+        | _ -> None
+        
+    let buildNodesTheCrew : seq<Node> =
+        let attrs forType= 
+            TheCrew.Value.Keys 
+            |> Seq.ofArray
+            |> Seq.filter (fun k -> k.For = forType)
+            |> Seq.map (fun k -> k.Id, (k.AttrName, k.AttrType))
+            |> Map.ofSeq
+        let NodeAttrs = attrs "node" 
+        let EdgeAttrs = attrs "edge" 
+        
+        let Id id = AddressBlock.NodeID { Domain = "biggraph://ahghee.com"; Database="TinkerPop"; Graph="TheCrew"; NodeId=id; RouteKey= None}
+        
+        TheCrew.Value.Graph.Nodes 
+        |> Seq.map (fun n -> 
+             { 
+                Node.NodeIDs = [| Id (n.Id.ToString()) |];  
+                Node.Attributes = 
+                    n.Datas
+                    |> Seq.ofArray
+                    |> Seq.map (fun d ->
+                        let keyBytes = 
+                            let (name, typ) = NodeAttrs.Item d.Key
+                            Encoding.UTF8.GetBytes name
+                        
+                        let valueMime =
+                            let (name, typ) = NodeAttrs.Item d.Key 
+                            xsType typ
+                        
+                        let valueBytes =
+                            match valueMime with
+                            | m when m = mimePlainTextUtf8 -> match d.String with  
+                                                   | Some(s) -> Encoding.UTF8.GetBytes s
+                                                   | _ -> Array.empty<byte>
+                            | m when m = mimeXmlDouble -> match d.String with  
+                                               | Some(s) -> BitConverter.GetBytes (double s)
+                                               | _ -> Array.empty<byte>
+                            | m when m = mimeXmlInt -> match d.String with  
+                                            | Some(s) -> BitConverter.GetBytes (int32 s)
+                                            | _ -> Array.empty<byte>
+                            | _ -> Array.empty<byte>                                                                                    
+                        
+                        { 
+                            KeyValue.Key= BinaryBlock (MimeBytes {
+                                                                MimeBytes.Mime= mimePlainTextUtf8;
+                                                                Bytes= keyBytes
+                                                                     })
+                            Value= [BinaryBlock (MimeBytes {
+                                                            MimeBytes.Mime= valueMime
+                                                            Bytes= valueBytes})]
+                        }
+                    )    
+             }
+        )
