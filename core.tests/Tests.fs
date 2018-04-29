@@ -251,10 +251,10 @@ type MyTests(output:ITestOutputHelper) =
          Assert.Equal<string * string * list<Data>>(expected,actual)         
 
     [<Fact>] 
-    member __.``After load tinkerpop-crew.xml Nodes have knows Edges`` () =
+    member __.``After load tinkerpop-crew.xml Nodes have 'out.knows' Edges`` () =
         let g:Graph = __.toyGraph
               
-        let attrName = "knows"
+        let attrName = "out.knows"
         let actual = __.CollectValues attrName g                                         
         
         let expected = [ 
@@ -266,9 +266,9 @@ type MyTests(output:ITestOutputHelper) =
         Assert.Equal<string * string * list<Data>>(expected,actual)
         
     [<Fact>] 
-    member __.``After load tinkerpop-crew.xml Nodes have created Edges`` () =        
+    member __.``After load tinkerpop-crew.xml Nodes have 'out.created' Edges`` () =        
         let g:Graph = __.toyGraph
-        let attrName = "created"
+        let attrName = "out.created"
         let actual = __.CollectValues attrName g                                         
         
         let expected = [ 
@@ -281,6 +281,46 @@ type MyTests(output:ITestOutputHelper) =
         output.WriteLine(sprintf "expectedData: %A" expected)
         Assert.Equal<string * string * list<Data>>(expected,actual)
     
+
+    [<Fact>] 
+    member __.``After load tinkerpop-crew.xml Nodes have 'in.knows' Edges`` () =
+        let g:Graph = __.toyGraph
+              
+        let attrName = "in.knows"
+        let actual = __.CollectValues attrName g                                         
+        
+        let expected = [ 
+                    "2",attrName, [DABTestId "7"]
+                    "4",attrName, [DABTestId "8"]
+                    ]
+        output.WriteLine(sprintf "foundData: %A" actual)
+        output.WriteLine(sprintf "expectedData: %A" expected)
+        Assert.Equal<string * string * list<Data>>(expected,actual)
+        
+    [<Fact>] 
+    member __.``After load tinkerpop-crew.xml Nodes have 'in.created' Edges`` () =        
+        let sortedByNodeIdEdgeId (data: list<string * string * list<Data>>) = 
+            data 
+            |> List.sortBy (fun (a,b,c) -> a , match (c |> List.head) with 
+                                                                      | Data.AddressBlock(AddressBlock.NodeID ab) -> ab.NodeId
+                                                                      | _ ->  ""
+                                                  )
+        let g:Graph = __.toyGraph
+        let attrName = "in.created"
+        let actual = __.CollectValues attrName g
+                    |> sortedByNodeIdEdgeId                                         
+        
+        let expected = [ 
+                         "3",attrName, [DABTestId "9"]
+                         "5",attrName, [DABTestId "10"]
+                         "3",attrName, [DABTestId "11"]
+                         "3",attrName, [DABTestId "12"]
+                       ] 
+                       |> sortedByNodeIdEdgeId
+                     
+        output.WriteLine(sprintf "foundData: %A" actual)
+        output.WriteLine(sprintf "expectedData: %A" expected)
+        Assert.Equal<string * string * list<Data>>(expected,actual)
          
          
          

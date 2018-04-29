@@ -205,11 +205,24 @@ module TinkerPop =
                                                     {
                                                         KeyValue.Key = DBBString (e.Datas 
                                                                                  |> Seq.find (fun d -> d.Key = "labelE")
-                                                                                 |> (fun d -> d.String.Value)
+                                                                                 |> (fun d -> "out." + d.String.Value)
                                                                                  );
                                                         Value = [DABTestId (e.Id.ToString())]
                                                     }                         
                                                  )
-                                     )  
+                                     ) 
+                    |> Seq.append (TheCrew.Value.Graph.Edges
+                                     |> Seq.ofArray
+                                     |> Seq.filter (fun e -> e.Target = n.Id)
+                                     |> Seq.map (fun e -> 
+                                                    {
+                                                        KeyValue.Key = DBBString (e.Datas 
+                                                                                 |> Seq.find (fun d -> d.Key = "labelE")
+                                                                                 |> (fun d -> "in." + d.String.Value)
+                                                                                 );
+                                                        Value = [DABTestId (e.Id.ToString())]
+                                                    }                         
+                                                 )
+                                     )                  
              }
         )
