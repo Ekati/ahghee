@@ -69,7 +69,8 @@ type IStorage =
     abstract member Nodes: seq<Node>
     abstract member Add: seq<Node> -> System.Threading.Tasks.Task
     abstract member Remove: seq<AddressBlock> -> System.Threading.Tasks.Task
-    abstract member TryFind: seq<AddressBlock> -> System.Threading.Tasks.Task<seq<AddressBlock * Either<Node, Exception>>>
+    abstract member Items: seq<AddressBlock> -> System.Threading.Tasks.Task<seq<AddressBlock * Either<Node, Exception>>>
+    abstract member First: (Node -> bool) -> System.Threading.Tasks.Task<Option<Node>> 
 
 type MemoryStore() =
     let mutable _nodes:seq<Node> = Seq.empty
@@ -83,7 +84,7 @@ type MemoryStore() =
                                                     let head = n.NodeIDs |> Seq.head 
                                                     nodeIDs |> Seq.contains head |> not)
             Task.CompletedTask    
-        member this.TryFind (addresses:seq<AddressBlock>) =
+        member this.Items (addresses:seq<AddressBlock>) =
             let matches = addresses |> Seq.map (fun addr -> 
                                                 match addr with 
                                                 | NodeID(id) -> 
@@ -94,13 +95,18 @@ type MemoryStore() =
                                                                 | None -> (addr, Right (Failure "remote nodes not supported yet"))
                                                 | MemoryPointer(pointer) -> (addr, Right (Failure  "MemoryPointer not supported yet")) 
                                                 )
-            Task.FromResult matches                                                
+            Task.FromResult matches      
+        member this.First (predicate: (Node -> bool)) : System.Threading.Tasks.Task<Option<Node>> =
+            _nodes
+            |> Seq.tryFind predicate  
+            |> Task.FromResult                                           
  
 type Graph(storage:IStorage) =  
     member x.Nodes = storage.Nodes
     member x.Add (nodes:seq<Node>) = storage.Add nodes
     member x.Remove (nodes:seq<AddressBlock>) = storage.Remove nodes
-    member x.TryFind (addressBlock:seq<AddressBlock>) = storage.TryFind addressBlock                       
+    member x.Items (addressBlock:seq<AddressBlock>) = storage.Items addressBlock
+    member x.First (predicate: (Node -> bool)) : System.Threading.Tasks.Task<Option<Node>> = storage.First predicate
 
 module Utils =
     let mimePlainTextUtf8 = Some("xs:string")

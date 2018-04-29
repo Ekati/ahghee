@@ -149,7 +149,7 @@ type MyTests(output:ITestOutputHelper) =
                                                                  | _ -> false)
                                          |> Seq.map    (fun x -> x.Value )
                                          |> Seq.distinct
-                                         |> g.TryFind 
+                                         |> g.Items 
                                                                                
     
         Assert.NotEmpty nodesWithIncomingEdges.Result
@@ -181,61 +181,6 @@ type MyTests(output:ITestOutputHelper) =
                            |> Seq.map (fun n -> n.ToString())
                            
          Assert.Equal<string>(expectedIds,loadedIds)                             
-             
-    [<Fact>] 
-    member __.``Can get labelV after load tinkerpop-crew.xml into graph`` () =
-         let g:Graph = new Graph(new MemoryStore())
-         let nodes = buildNodesTheCrew
-         let task = g.Add nodes
-         match task.Status with
-             | TaskStatus.Created -> task.Start()
-             | _ -> ()                                                                     
-         task.Wait()
-                  
-         output.WriteLine("g.Nodes length: {0}", g.Nodes |> Seq.length )
-         
-         let actual = g.Nodes
-                         |> Seq.collect (fun n -> n.Attributes 
-                                                  |> Seq.filter (fun attr -> match attr.Key with 
-                                                                             | BinaryBlock(MimeBytes mb) when mb.Mime = mimePlainTextUtf8 -> 
-                                                                               ( "labelV" , Encoding.UTF8.GetString mb.Bytes) |> String.Equals 
-                                                                             | _ -> false
-                                                                )
-                                                  |> Seq.map    (fun attr -> n, attr) 
-                                                  |> Seq.collect (fun (n,attr) -> 
-                                                                let _id = n.NodeIDs |> Seq.head |> (fun id -> match id with    
-                                                                                              | NodeID(nid) -> nid.NodeId
-                                                                                              | MemoryPointer(mp) -> "")  
-                                                                                              
-                                                                let labelV = match attr.Key with 
-                                                                             | BinaryBlock(MimeBytes mb) when mb.Mime = mimePlainTextUtf8 ->
-                                                                                    Encoding.UTF8.GetString mb.Bytes
-                                                                             | _ -> ""
-                                                                             
-                                                                let values = attr.Value
-                                                                            |> Seq.map (fun v -> match v with
-                                                                                                 | BinaryBlock(MimeBytes mb) when mb.Mime = mimePlainTextUtf8 ->
-                                                                                                      Encoding.UTF8.GetString mb.Bytes
-                                                                                                 | _ -> "" 
-                                                                                       )                                                                                                           
-                                                                values 
-                                                                |> Seq.map (fun v -> _id,labelV,v)
-                                                             )                                                           
-                                         )
-                         |> List.ofSeq                                         
-              
-         output.WriteLine(sprintf "foundData: %A" actual)
-                                       
-         let expected = [ 
-                                "1","labelV","person";
-                                "2","labelV","person";
-                                "3","labelV","software";
-                                "4","labelV","person";
-                                "5","labelV","software";
-                                "6","labelV","person"; 
-                           ]
-                           
-         Assert.Equal<string * string * string>(expected,actual)
 
     member __.CollectValues key (graph:Graph) =
         graph.Nodes
@@ -267,6 +212,33 @@ type MyTests(output:ITestOutputHelper) =
                                                  )                                                           
                              )
              |> List.ofSeq
+             
+    [<Fact>] 
+    member __.``Can get labelV after load tinkerpop-crew.xml into graph`` () =
+         let g:Graph = new Graph(new MemoryStore())
+         let nodes = buildNodesTheCrew
+         let task = g.Add nodes
+         match task.Status with
+             | TaskStatus.Created -> task.Start()
+             | _ -> ()                                                                     
+         task.Wait()
+                  
+         output.WriteLine("g.Nodes length: {0}", g.Nodes |> Seq.length )
+         
+         let attrName = "labelV"
+         let actual = __.CollectValues attrName g
+                                       
+         let expected = [ 
+                                "1",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "person";
+                                "2",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "person";
+                                "3",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "software";
+                                "4",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "person";
+                                "5",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "software";
+                                "6",attrName,mimePlainTextUtf8, Encoding.UTF8.GetBytes "person"; 
+                           ]
+         output.WriteLine(sprintf "foundData: %A" actual)
+         output.WriteLine(sprintf "expectedData: %A" expected)                           
+         Assert.Equal<string * string * Option<string> * byte[]>(expected,actual) 
          
     [<Fact>] 
     member __.``After load tinkerpop-crew.xml Age has mime type int and comes out as int`` () =
