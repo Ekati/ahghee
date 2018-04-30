@@ -28,6 +28,7 @@ open System.Threading.Tasks
 // |----------
 
 type MemoryPointer = { 
+    PartitionKey: string
     FileName: string; 
     offset: int64; 
     length: int64 
@@ -39,19 +40,15 @@ type MetaBytes = {
     }
 
 type NodeID = { 
-    Graph: string; 
-    NodeId: string; 
-    RouteKey: Option<string>
+    Graph: string 
+    NodeId: string 
     Pointer: Option<MemoryPointer>
     } 
     
 type GlobalNodeID = { 
-    Domain: string; 
-    Database: string; 
-    Graph: string; 
-    NodeId: string; 
-    RouteKey: Option<string>
-    Pointer: Option<MemoryPointer>
+    Domain: string
+    Database: string 
+    NodeId: NodeID
     }     
      
 type BinaryBlock =
@@ -121,7 +118,7 @@ module Utils =
     let metaXmlInt = Some("xs:int")
     let metaXmlDouble = Some("xs:double")
     
-    let ABTestId id = AddressBlock.NodeID { Graph="People"; NodeId=id; RouteKey= None; Pointer=None;}
+    let ABTestId id = AddressBlock.NodeID { Graph="People"; NodeId=id; Pointer=None;}
     let BBString (text:string) = BinaryBlock.MetaBytes { Meta = metaPlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) }
     let BBInt (value:int) = BinaryBlock.MetaBytes { Meta = metaXmlInt ; Bytes = BitConverter.GetBytes value }
     let BBDouble (value:double) = BinaryBlock.MetaBytes { Meta = metaXmlDouble ; Bytes = BitConverter.GetBytes value }
@@ -165,7 +162,7 @@ module TinkerPop =
         let NodeAttrs = attrs "node" 
         let EdgeAttrs = attrs "edge" 
         
-        let Id id = AddressBlock.NodeID { Graph="TheCrew"; NodeId=id; RouteKey= None; Pointer=None;}
+        let Id id = AddressBlock.NodeID { Graph="TheCrew"; NodeId=id; Pointer=None;}
         
         let buildNodesFromGraphMlNodes (nodes:seq<GraphML.Node>) (edges:seq<GraphML.Edge>) = 
             nodes
