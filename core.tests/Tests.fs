@@ -23,17 +23,17 @@ type MyTests(output:ITestOutputHelper) =
         let success = match id with 
                         | Data.AddressBlock(AddressBlock.NodeID nodeid) -> true
                         //| Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> true
-                        | Data.BinaryBlock(BinaryBlock.MimeBytes data) -> false
+                        | Data.BinaryBlock(BinaryBlock.MetaBytes data) -> false
                         | Data.BinaryBlock(BinaryBlock.MemoryPointer pointer) -> false   
         Assert.True(success)  
         
     [<Fact>]
     member __.``Can create a Binary type`` () =
-        let d : Data = BinaryBlock ( MimeBytes { MimeBytes.Mime= mimePlainTextUtf8; MimeBytes.Bytes = Array.Empty<byte>() } )
+        let d : Data = BinaryBlock ( MetaBytes { MetaBytes.Meta= metaPlainTextUtf8; MetaBytes.Bytes = Array.Empty<byte>() } )
         let success = match d with 
                         | Data.AddressBlock(AddressBlock.NodeID nodeId) -> false
                         //| Data.AddressBlock(AddressBlock.MemoryPointer pointer) -> false
-                        | Data.BinaryBlock(BinaryBlock.MimeBytes data) -> true
+                        | Data.BinaryBlock(BinaryBlock.MetaBytes data) -> true
                         | Data.BinaryBlock(BinaryBlock.MemoryPointer pointer) -> true
         Assert.True success   
     
@@ -44,7 +44,7 @@ type MyTests(output:ITestOutputHelper) =
         let pair = PropString "firstName" [|"Richard"; "Dick"|]
     
         let success = match pair.Key with 
-                        | BinaryBlock (MimeBytes b) when b.Mime.IsSome && b.Mime.Value = mimePlainTextUtf8.Value -> true 
+                        | BinaryBlock (MetaBytes b) when b.Meta.IsSome && b.Meta.Value = metaPlainTextUtf8.Value -> true 
                         | _ -> false
         Assert.True success     
         
@@ -192,7 +192,7 @@ type MyTests(output:ITestOutputHelper) =
         graph.Nodes
              |> Seq.collect (fun n -> n.Attributes 
                                       |> Seq.filter (fun attr -> match attr.Key with 
-                                                                 | BinaryBlock(MimeBytes mb) when mb.Mime = mimePlainTextUtf8 -> 
+                                                                 | BinaryBlock(MetaBytes mb) when mb.Meta = metaPlainTextUtf8 -> 
                                                                    ( key , Encoding.UTF8.GetString mb.Bytes) |> String.Equals 
                                                                  | _ -> false
                                                     )
@@ -204,7 +204,7 @@ type MyTests(output:ITestOutputHelper) =
                                                                                   )  
                                                                                   
                                                     let labelV = match attr.Key with 
-                                                                 | BinaryBlock(MimeBytes mb) when mb.Mime = mimePlainTextUtf8 ->
+                                                                 | BinaryBlock(MetaBytes mb) when mb.Meta = metaPlainTextUtf8 ->
                                                                         Encoding.UTF8.GetString mb.Bytes
                                                                  | _ -> ""
                                                                                                           
@@ -236,7 +236,7 @@ type MyTests(output:ITestOutputHelper) =
          Assert.Equal<string * string * list<Data>>(expected,actual) 
          
     [<Fact>] 
-    member __.``After load tinkerpop-crew.xml Age has mime type int and comes out as int`` () =
+    member __.``After load tinkerpop-crew.xml Age has meta type int and comes out as int`` () =
          let g:Graph = __.toyGraph
                   
          output.WriteLine("g.Nodes length: {0}", g.Nodes |> Seq.length )
@@ -344,6 +344,11 @@ type MyTests(output:ITestOutputHelper) =
         output.WriteLine(sprintf "expectedData: %A" expected)
         Assert.Equal<string * string * list<Data>>(expected,actual)         
          
+    [<Fact>] 
+    member __.``After load tinkerpop-crew.xml has node data`` () =        
+        let g:Graph = __.toyGraph
+        output.WriteLine(sprintf "%A" g.Nodes)
+        Assert.NotEmpty(g.Nodes)
 
 //    [<Fact>]
 //    member __.``I can use the file api`` () =

@@ -24,7 +24,7 @@ open System.Threading.Tasks
 
 // Binary Block
 // |----------
-// | (MimeBytes | MemoryPointer )
+// | (MetaBytes | MemoryPointer )
 // |----------
 
 type MemoryPointer = { 
@@ -33,26 +33,34 @@ type MemoryPointer = {
     length: int64 
     }
            
-type MimeBytes = { 
-    Mime: Option<string>; 
+type MetaBytes = { 
+    Meta: Option<string>; 
     Bytes : Byte[] 
     }
 
 type NodeID = { 
+    Graph: string; 
+    NodeId: string; 
+    RouteKey: Option<string>
+    Pointer: Option<MemoryPointer>
+    } 
+    
+type GlobalNodeID = { 
     Domain: string; 
     Database: string; 
     Graph: string; 
     NodeId: string; 
     RouteKey: Option<string>
     Pointer: Option<MemoryPointer>
-    } 
+    }     
      
 type BinaryBlock =
-    | MimeBytes of MimeBytes
+    | MetaBytes of MetaBytes
     | MemoryPointer of MemoryPointer
 
 type AddressBlock =
     | NodeID of NodeID
+    | GlobalNodeID of GlobalNodeID
 
 type Data =
   | AddressBlock of AddressBlock
@@ -109,14 +117,14 @@ type Graph(storage:IStorage) =
     member x.First (predicate: (Node -> bool)) : System.Threading.Tasks.Task<Option<Node>> = storage.First predicate
 
 module Utils =
-    let mimePlainTextUtf8 = Some("xs:string")
-    let mimeXmlInt = Some("xs:int")
-    let mimeXmlDouble = Some("xs:double")
+    let metaPlainTextUtf8 = Some("xs:string")
+    let metaXmlInt = Some("xs:int")
+    let metaXmlDouble = Some("xs:double")
     
-    let ABTestId id = AddressBlock.NodeID { Domain = "biggraph://example.com"; Database="test"; Graph="People"; NodeId=id; RouteKey= None; Pointer=None;}
-    let BBString (text:string) = BinaryBlock.MimeBytes { Mime = mimePlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) }
-    let BBInt (value:int) = BinaryBlock.MimeBytes { Mime = mimeXmlInt ; Bytes = BitConverter.GetBytes value }
-    let BBDouble (value:double) = BinaryBlock.MimeBytes { Mime = mimeXmlDouble ; Bytes = BitConverter.GetBytes value }
+    let ABTestId id = AddressBlock.NodeID { Graph="People"; NodeId=id; RouteKey= None; Pointer=None;}
+    let BBString (text:string) = BinaryBlock.MetaBytes { Meta = metaPlainTextUtf8 ; Bytes = Text.UTF8Encoding.UTF8.GetBytes(text) }
+    let BBInt (value:int) = BinaryBlock.MetaBytes { Meta = metaXmlInt ; Bytes = BitConverter.GetBytes value }
+    let BBDouble (value:double) = BinaryBlock.MetaBytes { Meta = metaXmlDouble ; Bytes = BitConverter.GetBytes value }
     
     let DABTestId id = Data.AddressBlock (ABTestId id)    
     let DBBString (text:string) = Data.BinaryBlock (BBString text)
@@ -142,9 +150,9 @@ module TinkerPop =
     
     let xsType graphMlType : Option<string> =
         match graphMlType with
-        | "string" -> mimePlainTextUtf8
-        | "int" -> mimeXmlInt
-        | "double" -> mimeXmlDouble
+        | "string" -> metaPlainTextUtf8
+        | "int" -> metaXmlInt
+        | "double" -> metaXmlDouble
         | _ -> None
         
     let buildNodesTheCrew : seq<Node> =
@@ -157,7 +165,7 @@ module TinkerPop =
         let NodeAttrs = attrs "node" 
         let EdgeAttrs = attrs "edge" 
         
-        let Id id = AddressBlock.NodeID { Domain = "biggraph://ahghee.com"; Database="TinkerPop"; Graph="TheCrew"; NodeId=id; RouteKey= None; Pointer=None;}
+        let Id id = AddressBlock.NodeID { Graph="TheCrew"; NodeId=id; RouteKey= None; Pointer=None;}
         
         let buildNodesFromGraphMlNodes (nodes:seq<GraphML.Node>) (edges:seq<GraphML.Edge>) = 
             nodes
@@ -172,30 +180,30 @@ module TinkerPop =
                                     let (name, typ) = NodeAttrs.Item d.Key
                                     Encoding.UTF8.GetBytes name
                                 
-                                let valueMime =
+                                let valueMeta =
                                     let (name, typ) = NodeAttrs.Item d.Key 
                                     xsType typ
                                 
                                 let valueBytes =
-                                    match valueMime with
-                                    | m when m = mimePlainTextUtf8 -> match d.String with  
+                                    match valueMeta with
+                                    | m when m = metaPlainTextUtf8 -> match d.String with  
                                                            | Some(s) -> Encoding.UTF8.GetBytes s
                                                            | _ -> Array.empty<byte>
-                                    | m when m = mimeXmlDouble -> match d.String with  
+                                    | m when m = metaXmlDouble -> match d.String with  
                                                        | Some(s) -> BitConverter.GetBytes (double s)
                                                        | _ -> Array.empty<byte>
-                                    | m when m = mimeXmlInt -> match d.String with  
+                                    | m when m = metaXmlInt -> match d.String with  
                                                     | Some(s) -> BitConverter.GetBytes (int32 s)
                                                     | _ -> Array.empty<byte>
                                     | _ -> Array.empty<byte>                                                                                    
                                 
                                 { 
-                                    KeyValue.Key= BinaryBlock (MimeBytes {
-                                                                        MimeBytes.Mime= mimePlainTextUtf8;
+                                    KeyValue.Key= BinaryBlock (MetaBytes {
+                                                                        MetaBytes.Meta= metaPlainTextUtf8;
                                                                         Bytes= keyBytes
                                                                              })
-                                    Value= [BinaryBlock (MimeBytes {
-                                                                    MimeBytes.Mime= valueMime
+                                    Value= [BinaryBlock (MetaBytes {
+                                                                    MetaBytes.Meta= valueMeta
                                                                     Bytes= valueBytes})]
                                 }
                             )
@@ -239,30 +247,30 @@ module TinkerPop =
                                     let (name, typ) = EdgeAttrs.Item d.Key
                                     Encoding.UTF8.GetBytes name
                                 
-                                let valueMime =
+                                let valueMeta =
                                     let (name, typ) = EdgeAttrs.Item d.Key 
                                     xsType typ
                                 
                                 let valueBytes =
-                                    match valueMime with
-                                    | m when m = mimePlainTextUtf8 -> match d.String with  
+                                    match valueMeta with
+                                    | m when m = metaPlainTextUtf8 -> match d.String with  
                                                            | Some(s) -> Encoding.UTF8.GetBytes s
                                                            | _ -> Array.empty<byte>
-                                    | m when m = mimeXmlDouble -> match d.String with  
+                                    | m when m = metaXmlDouble -> match d.String with  
                                                        | Some(s) -> BitConverter.GetBytes (double s)
                                                        | _ -> Array.empty<byte>
-                                    | m when m = mimeXmlInt -> match d.String with  
+                                    | m when m = metaXmlInt -> match d.String with  
                                                     | Some(s) -> BitConverter.GetBytes (int32 s)
                                                     | _ -> Array.empty<byte>
                                     | _ -> Array.empty<byte>                                                                                    
                                 
                                 { 
-                                    KeyValue.Key= BinaryBlock (MimeBytes {
-                                                                        MimeBytes.Mime= mimePlainTextUtf8;
+                                    KeyValue.Key= BinaryBlock (MetaBytes {
+                                                                        MetaBytes.Meta= metaPlainTextUtf8;
                                                                         Bytes= keyBytes
                                                                              })
-                                    Value= [BinaryBlock (MimeBytes {
-                                                                    MimeBytes.Mime= valueMime
+                                    Value= [BinaryBlock (MetaBytes {
+                                                                    MetaBytes.Meta= valueMeta
                                                                     Bytes= valueBytes})]
                                 }
                             )
