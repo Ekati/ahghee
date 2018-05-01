@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+message MemoryPointer {
+    string partitionkey = 1;
+    string filename = 2;
+    int64 offset = 3;
+    int64 length = 4;
+}
+
+message MetaBytes{
+    string meta = 1;
+    bytes bytes = 2;
+}
+
+message NodeID {
+    string graph = 1;
+    string nodeid = 2;
+    MemoryPointer pointer = 3; 
+}
+
+message GlobalNodeID {
+    string domain = 1;
+    string database = 2;
+    NodeID nodeid = 3;
+}
+
+message BinaryBlock {
+    oneof binary {
+        MetaBytes metabytes = 1;
+        MemoryPointer memorypointer = 2;
+    }
+}
+
+message AddressBlock {
+    oneof address {
+        NodeID nodeid = 1;
+        GlobalNodeID globalnodeid = 2;
+    }
+}
+
+message DataBlock {
+    oneof data {
+        AddressBlock address = 1;
+        BinaryBlock binary = 2;
+    }
+}
+
+message KeyValue {
+    DataBlock key = 1;
+    repeated DataBlock value = 2;
+}
+
+message Node {
+    repeated AddressBlock ids = 1;
+    repeated KeyValue attributes = 2;
+}

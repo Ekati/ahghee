@@ -13,9 +13,6 @@ open System.Text
 open System.Threading.Tasks
 open FSharp.Data
 
-  
-
-
 type MyTests(output:ITestOutputHelper) =
     [<Fact>]
     member __.``Can create an InternalIRI type`` () =
