@@ -38,7 +38,7 @@ I'm looking for other contributors to help.
 - [gRPC](https://grpc.io/docs/quickstart/csharp.html) for RPC 
 - Use a [Log structured merge approach](http://www.cs.utexas.edu/~vijay/papers/sosp17-pebblesdb.pdf)
 - Cluster-nodes form a network where they only talk to a few other cluster-nodes
-- Metrics about which cluster-nodes ultimatly receive data from other cluster-nodes used modify the network
+- Metrics about which cluster-nodes ultimately receive data from other cluster-nodes used modify the network
 - NeuralNetwork node+query classification used for balancing graph-nodes on the network
 - A new cluster-node should be able to join the cluster just by authenticating with any cluster-node
 - Gateway nodes should be able to join multiple clusters to form a WAN cluster
