@@ -40,3 +40,6 @@ This project is still in it's early early stages, so click that *Watch* button.
 - A new cluster-node should be able to join the cluster just by authenticating with any cluster-node
 - Gateway nodes should be able to join multiple clusters to form a WAN cluster
 - Gateway nodes can control the flow of data between clusters (read/write/one-way)
+
+### Design 
+- [Whiteboard](https://realtimeboard.com/app/board/o9J_kz6OZhI=/)
