@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26124.0
@@ -6,6 +6,8 @@ MinimumVisualStudioVersion = 15.0.26124.0
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ahghee", "core\ahghee.fsproj", "{288181D8-6F02-4D85-AFB8-6F3D48FDEFF4}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "core.tests", "core.tests\core.tests.fsproj", "{C956CB21-08E4-4B0F-AA97-A2FDBF5D374A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ahghee.grpc", "ahghee.grpc\ahghee.grpc.csproj", "{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -44,5 +46,17 @@ Global
 		{C956CB21-08E4-4B0F-AA97-A2FDBF5D374A}.Release|x64.Build.0 = Release|x64
 		{C956CB21-08E4-4B0F-AA97-A2FDBF5D374A}.Release|x86.ActiveCfg = Release|x86
 		{C956CB21-08E4-4B0F-AA97-A2FDBF5D374A}.Release|x86.Build.0 = Release|x86
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Debug|x64.Build.0 = Debug|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Debug|x86.Build.0 = Debug|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Release|x64.ActiveCfg = Release|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Release|x64.Build.0 = Release|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Release|x86.ActiveCfg = Release|Any CPU
+		{D3C7171E-EF87-4F7D-BC7E-CAC5073E7EB0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
