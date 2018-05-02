@@ -13,6 +13,12 @@ open System.Text
 open System.Threading.Tasks
 open FSharp.Data
 
+
+type StorageType =
+    | Memory
+    | GrpcFile
+    
+
 type MyTests(output:ITestOutputHelper) =
     [<Fact>]
     member __.``Can create an InternalIRI type`` () =
@@ -108,9 +114,15 @@ type MyTests(output:ITestOutputHelper) =
         task.Wait()
         g
 
-    [<Fact>]
-    member __.``Can Add nodes to graph`` () =
-        let g:Graph = new Graph(new MemoryStore())
+    [<Theory>]
+    [<InlineData("StorageType.Memory")>]
+    [<InlineData("StorageType.GrpcFile")>]
+    member __.``Can Add nodes to graph`` (storeType) =
+        let g:Graph = 
+            match storeType with 
+            | "StorageType.Memory" ->   new Graph(new MemoryStore())
+            | "StorageType.GrpcFile" -> new Graph(new GrpcFileStore({Config.ParitionCount=12}))
+            
         let nodes = __.buildNodes
         let task = g.Add nodes
         match task.Status with

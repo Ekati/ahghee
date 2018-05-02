@@ -191,11 +191,12 @@ type GrpcFileStore(config:Config) =
     let ``Index of NodeID without MemoryPointer -> NodeId that need them`` = new System.Collections.Concurrent.ConcurrentDictionary<Grpc.NodeID,list<Grpc.NodeID>>()
     
     let IndexMaintainer =
-        MailboxProcessor<Grpc.NodeID * Grpc.MemoryPointer>.Start(fun inbox ->
+        MailboxProcessor<Grpc.NodeID * Grpc.MemoryPointer * AsyncReplyChannel<unit>>.Start(fun inbox ->
             let rec messageLoop() = 
                 async{
-                    let! (sn,mp) = inbox.Receive()
+                    let! (sn,mp,rc) = inbox.Receive()
                     ``Index of NodeID -> MemoryPointer``.AddOrUpdate(sn, mp, (fun x y -> mp)) |> ignore
+                    rc.Reply ()
                     return! messageLoop()
                 }
             messageLoop()    
@@ -203,7 +204,7 @@ type GrpcFileStore(config:Config) =
         
     let PartitionWriters = 
         seq { for i in 0 .. (config.ParitionCount - 1) do
-                yield MailboxProcessor.Start(fun inbox ->
+                yield MailboxProcessor<Node * AsyncReplyChannel<unit>>.Start(fun inbox ->
                     // TODO: Open a file that is consistant with the partition number
                     let fileName = IO.Path.GetTempFileName()
                     let stream = new IO.FileStream(fileName,IO.FileMode.Append,IO.FileAccess.ReadWrite,IO.FileShare.Read,1024,true)
@@ -216,7 +217,7 @@ type GrpcFileStore(config:Config) =
                             mp.Partitionkey <- i.ToString() 
                             mp.Filename <- fileName
                             mp.Offset <- offset
-                            let! n = inbox.Receive()
+                            let! (n,replyChannel) = inbox.Receive()
                             
                             // TODO: If the NodeID is already used. Determine if we do an update or create a linked node
                             let sn = new Grpc.Node()
@@ -229,7 +230,8 @@ type GrpcFileStore(config:Config) =
                                                         )
                             mp.Length <- (sn.CalculateSize() |> int64)
                             sn.WriteTo out
-                            IndexMaintainer.Post (sn.Ids.Item(0).Nodeid, mp)
+                            let! reply = IndexMaintainer.PostAndAsyncReply (fun rc -> (sn.Ids.Item(0).Nodeid, mp, rc ))
+                            replyChannel.Reply ()
                             return! messageLoop()
                         }
                     messageLoop()
@@ -241,11 +243,21 @@ type GrpcFileStore(config:Config) =
         member x.Nodes = raise (new NotImplementedException())
         member this.Add (nodes:seq<Node>) = 
             Task.Factory.StartNew (fun () ->
-                for n in nodes do 
-                    let hashPartition = n.NodeIDs |> Seq.head |> (fun x -> (x.GetHashCode() % config.ParitionCount)) 
-                    PartitionWriters.[hashPartition].Post n
-                    
-                    
+                nodes 
+                    |> Seq.map (fun n ->
+                        let hashPartition = n.NodeIDs 
+                                            // TODO: Don't hash the whole NodeID as it contains the MemoryPointer
+                                            // TODO: Need to hash without the memory pointer
+                                            |> Seq.map (fun x -> (x.GetHashCode() % (config.ParitionCount - 1))) 
+                                            |> Seq.head 
+                        Console.WriteLine(sprintf "Accessing PartitionWriter %A" hashPartition)
+                        // TODO: Getting index out of bounds errors on this array access using the hashPartion sometimes                                            
+                        PartitionWriters.[hashPartition].PostAndAsyncReply (fun (replyChannel:AsyncReplyChannel<unit>) -> n,replyChannel)
+                        )
+                    |> Seq.map (fun x -> Async.StartAsTask x :> Task)
+                    |> Array.ofSeq
+                    |> Task.WaitAll
+                    |> ignore
                 )                        
         member x.Remove (nodes:seq<AddressBlock>) = raise (new NotImplementedException())
         member x.Items (addressBlock:seq<AddressBlock>) = raise (new NotImplementedException())
