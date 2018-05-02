@@ -11,4 +11,7 @@
     <PackageReference Include="FSharp.Data" Version="3.0.0-beta3" />
     <PackageReference Include="Microsoft.AspNetCore.All" Version="2.0.7" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ahghee.grpc\ahghee.grpc.csproj" />
+  </ItemGroup>
 </Project>

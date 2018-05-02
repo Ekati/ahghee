@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package ahghee.grpc;
+
 message MemoryPointer {
     string partitionkey = 1;
     string filename = 2;

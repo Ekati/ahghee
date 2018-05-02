@@ -1,5 +1,8 @@
 namespace Ahghee
 
+open Google.Protobuf
+open Google.Protobuf.Collections
+open Microsoft.AspNetCore.Mvc
 open System
 open System.Threading.Tasks
 
@@ -98,13 +101,125 @@ type MemoryStore() =
                                                                 match isLocal with 
                                                                 | Some node -> (addr, Left(node))
                                                                 | None -> (addr, Right (Failure "remote nodes not supported yet"))
-                                                //| MemoryPointer(pointer) -> (addr, Right (Failure  "MemoryPointer not supported yet")) 
+                                                | _ -> raise (new NotImplementedException())
                                                 )
             Task.FromResult matches      
         member this.First (predicate: (Node -> bool)) : System.Threading.Tasks.Task<Option<Node>> =
             _nodes
             |> Seq.tryFind predicate  
             |> Task.FromResult                                           
+
+
+
+type GrpcFileStore() = 
+    let NullPointer = 
+        let p = new Grpc.MemoryPointer()
+        p.Filename <- ""
+        p.Partitionkey <- ""
+        p.Offset <- 0L
+        p.Length <- 0L
+        p
+        
+    let ToGrpcNodeId nodeid =
+        let gid = new Grpc.NodeID()
+        gid.Graph <- nodeid.Graph
+        gid.Nodeid <- nodeid.NodeId
+        gid.Pointer <- NullPointer
+        gid
+    
+    let ToGrpcGlobalNodeId nodeid =
+        let gnodeid = new Grpc.GlobalNodeID()
+        gnodeid.Domain <- nodeid.Domain
+        gnodeid.Database <- nodeid.Database
+        gnodeid.Nodeid <- ToGrpcNodeId nodeid.NodeId
+        gnodeid       
+    
+    let ToGrpcAddressBlock ab =
+        let abbb = new Grpc.AddressBlock()
+        match ab with 
+          | NodeID(a) -> 
+                abbb.Nodeid <- ToGrpcNodeId a
+                abbb
+          | GlobalNodeID(b) -> 
+                abbb.Globalnodeid <- ToGrpcGlobalNodeId b
+                abbb
+    
+    let ToGrpcMetaBytes (mb:MetaBytes) =
+        let metaBytes = new Grpc.MetaBytes()
+        metaBytes.Meta <- (mb.Meta |> Option.defaultValue "")
+        metaBytes.Bytes <- ByteString.CopyFrom(mb.Bytes)
+        metaBytes
+    
+    let ToGrpcMemoryPointer (mp:MemoryPointer) =
+        let memoryPointer = new Grpc.MemoryPointer()
+        memoryPointer.Partitionkey <- mp.PartitionKey
+        memoryPointer.Filename <- mp.FileName
+        memoryPointer.Offset <- mp.offset
+        memoryPointer.Length <- mp.length
+        memoryPointer
+    
+    let ToGrpcDataBlock (data:Data) =
+        let db = new Grpc.DataBlock()
+        match data with 
+        | AddressBlock (NodeID n) -> 
+             db.Address.Nodeid <- ToGrpcNodeId n
+             db
+        | AddressBlock (GlobalNodeID n) -> 
+            db.Address.Globalnodeid <- ToGrpcGlobalNodeId n
+            db              
+        | BinaryBlock (MetaBytes mb) ->
+            db.Binary.Metabytes <- ToGrpcMetaBytes mb
+            db
+        | BinaryBlock (MemoryPointer mp) ->
+            db.Binary.Memorypointer <- ToGrpcMemoryPointer mp
+            db   
+    
+    let ToGrpcKeyValue (kv:KeyValue ) =
+        let gkv = new Grpc.KeyValue()
+        gkv.Key <- ToGrpcDataBlock kv.Key
+        gkv.Value.AddRange ( kv.Value
+                                |> Seq.map (fun x -> ToGrpcDataBlock x)
+                                )
+        gkv                                
+    
+    // TODO: Switch to PebblesDB when index gets to big
+    let ``Index of NodeID -> MemoryPointer`` = new System.Collections.Concurrent.ConcurrentDictionary<Grpc.NodeID,Grpc.MemoryPointer>()
+        
+    interface IStorage with
+        member x.Nodes = raise (new NotImplementedException())
+        member this.Add (nodes:seq<Node>) = 
+            Task.Factory.StartNew (fun () ->
+                
+                // TODO: If the NodeID is already used. Determine if we do an update or create a linked node
+                // TODO: Switch to the processing queue for this Partition
+                 
+                let fileName = IO.Path.GetTempFileName()
+                let stream = new IO.FileStream(fileName,IO.FileMode.Append,IO.FileAccess.ReadWrite,IO.FileShare.Read,1024,true)
+                let out = new CodedOutputStream(stream)
+                let offset = out.Position
+                
+                for n in nodes do 
+                    let mp = Ahghee.Grpc.MemoryPointer()
+                    let hashPartition = n.NodeIDs |> Seq.head |> (fun x -> (x.GetHashCode() % 1024).ToString()) 
+                    mp.Partitionkey <- hashPartition 
+                    mp.Filename <- fileName
+                    mp.Offset <- offset
+                    
+                    let sn = new Grpc.Node()
+                    sn.Ids.AddRange (n.NodeIDs
+                                        |> Seq.map (fun ab -> ToGrpcAddressBlock ab)
+                                        ) 
+                        
+                    sn.Attributes.AddRange (n.Attributes
+                                                |> Seq.map (fun kv -> ToGrpcKeyValue kv)  
+                                                )
+                    mp.Length <- (sn.CalculateSize() |> int64)
+                    sn.WriteTo out
+                    ``Index of NodeID -> MemoryPointer``.AddOrUpdate(sn.Ids.Item(0).Nodeid, mp, (fun x y -> mp)) |> ignore
+                )                        
+        member x.Remove (nodes:seq<AddressBlock>) = raise (new NotImplementedException())
+        member x.Items (addressBlock:seq<AddressBlock>) = raise (new NotImplementedException())
+        member x.First (predicate: (Node -> bool)) = raise (new NotImplementedException())
  
 type Graph(storage:IStorage) =  
     member x.Nodes = storage.Nodes
@@ -184,14 +299,14 @@ module TinkerPop =
                                 let valueBytes =
                                     match valueMeta with
                                     | m when m = metaPlainTextUtf8 -> match d.String with  
-                                                           | Some(s) -> Encoding.UTF8.GetBytes s
-                                                           | _ -> Array.empty<byte>
+                                                                       | Some(s) -> Encoding.UTF8.GetBytes s
+                                                                       | _ -> Array.empty<byte>
                                     | m when m = metaXmlDouble -> match d.String with  
-                                                       | Some(s) -> BitConverter.GetBytes (double s)
-                                                       | _ -> Array.empty<byte>
+                                                                   | Some(s) -> BitConverter.GetBytes (double s)
+                                                                   | _ -> Array.empty<byte>
                                     | m when m = metaXmlInt -> match d.String with  
-                                                    | Some(s) -> BitConverter.GetBytes (int32 s)
-                                                    | _ -> Array.empty<byte>
+                                                                | Some(s) -> BitConverter.GetBytes (int32 s)
+                                                                | _ -> Array.empty<byte>
                                     | _ -> Array.empty<byte>                                                                                    
                                 
                                 { 
@@ -251,14 +366,14 @@ module TinkerPop =
                                 let valueBytes =
                                     match valueMeta with
                                     | m when m = metaPlainTextUtf8 -> match d.String with  
-                                                           | Some(s) -> Encoding.UTF8.GetBytes s
-                                                           | _ -> Array.empty<byte>
+                                                                       | Some(s) -> Encoding.UTF8.GetBytes s
+                                                                       | _ -> Array.empty<byte>
                                     | m when m = metaXmlDouble -> match d.String with  
-                                                       | Some(s) -> BitConverter.GetBytes (double s)
-                                                       | _ -> Array.empty<byte>
+                                                                   | Some(s) -> BitConverter.GetBytes (double s)
+                                                                   | _ -> Array.empty<byte>
                                     | m when m = metaXmlInt -> match d.String with  
-                                                    | Some(s) -> BitConverter.GetBytes (int32 s)
-                                                    | _ -> Array.empty<byte>
+                                                                | Some(s) -> BitConverter.GetBytes (int32 s)
+                                                                | _ -> Array.empty<byte>
                                     | _ -> Array.empty<byte>                                                                                    
                                 
                                 { 
