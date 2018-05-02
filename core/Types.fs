@@ -109,9 +109,13 @@ type MemoryStore() =
             |> Seq.tryFind predicate  
             |> Task.FromResult                                           
 
+type Config = {
+    ParitionCount:int
+    }
+    
 
 
-type GrpcFileStore() = 
+type GrpcFileStore(config:Config) = 
     let NullPointer = 
         let p = new Grpc.MemoryPointer()
         p.Filename <- ""
@@ -184,38 +188,64 @@ type GrpcFileStore() =
     
     // TODO: Switch to PebblesDB when index gets to big
     let ``Index of NodeID -> MemoryPointer`` = new System.Collections.Concurrent.ConcurrentDictionary<Grpc.NodeID,Grpc.MemoryPointer>()
+    let ``Index of NodeID without MemoryPointer -> NodeId that need them`` = new System.Collections.Concurrent.ConcurrentDictionary<Grpc.NodeID,list<Grpc.NodeID>>()
+    
+    let IndexMaintainer =
+        MailboxProcessor<Grpc.NodeID * Grpc.MemoryPointer>.Start(fun inbox ->
+            let rec messageLoop() = 
+                async{
+                    let! (sn,mp) = inbox.Receive()
+                    ``Index of NodeID -> MemoryPointer``.AddOrUpdate(sn, mp, (fun x y -> mp)) |> ignore
+                    return! messageLoop()
+                }
+            messageLoop()    
+        )
+        
+    let PartitionWriters = 
+        seq { for i in 0 .. (config.ParitionCount - 1) do
+                yield MailboxProcessor.Start(fun inbox ->
+                    // TODO: Open a file that is consistant with the partition number
+                    let fileName = IO.Path.GetTempFileName()
+                    let stream = new IO.FileStream(fileName,IO.FileMode.Append,IO.FileAccess.ReadWrite,IO.FileShare.Read,1024,true)
+                    let out = new CodedOutputStream(stream)
+                    
+                    let rec messageLoop() = 
+                        async{
+                            let offset = out.Position
+                            let mp = Ahghee.Grpc.MemoryPointer()
+                            mp.Partitionkey <- i.ToString() 
+                            mp.Filename <- fileName
+                            mp.Offset <- offset
+                            let! n = inbox.Receive()
+                            
+                            // TODO: If the NodeID is already used. Determine if we do an update or create a linked node
+                            let sn = new Grpc.Node()
+                            sn.Ids.AddRange (n.NodeIDs
+                                                |> Seq.map (fun ab -> ToGrpcAddressBlock ab)
+                                                ) 
+                                
+                            sn.Attributes.AddRange (n.Attributes
+                                                        |> Seq.map (fun kv -> ToGrpcKeyValue kv)  
+                                                        )
+                            mp.Length <- (sn.CalculateSize() |> int64)
+                            sn.WriteTo out
+                            IndexMaintainer.Post (sn.Ids.Item(0).Nodeid, mp)
+                            return! messageLoop()
+                        }
+                    messageLoop()
+                    )     
+        } |> Array.ofSeq
+           
         
     interface IStorage with
         member x.Nodes = raise (new NotImplementedException())
         member this.Add (nodes:seq<Node>) = 
             Task.Factory.StartNew (fun () ->
-                
-                // TODO: If the NodeID is already used. Determine if we do an update or create a linked node
-                // TODO: Switch to the processing queue for this Partition
-                 
-                let fileName = IO.Path.GetTempFileName()
-                let stream = new IO.FileStream(fileName,IO.FileMode.Append,IO.FileAccess.ReadWrite,IO.FileShare.Read,1024,true)
-                let out = new CodedOutputStream(stream)
-                let offset = out.Position
-                
                 for n in nodes do 
-                    let mp = Ahghee.Grpc.MemoryPointer()
-                    let hashPartition = n.NodeIDs |> Seq.head |> (fun x -> (x.GetHashCode() % 1024).ToString()) 
-                    mp.Partitionkey <- hashPartition 
-                    mp.Filename <- fileName
-                    mp.Offset <- offset
+                    let hashPartition = n.NodeIDs |> Seq.head |> (fun x -> (x.GetHashCode() % config.ParitionCount)) 
+                    PartitionWriters.[hashPartition].Post n
                     
-                    let sn = new Grpc.Node()
-                    sn.Ids.AddRange (n.NodeIDs
-                                        |> Seq.map (fun ab -> ToGrpcAddressBlock ab)
-                                        ) 
-                        
-                    sn.Attributes.AddRange (n.Attributes
-                                                |> Seq.map (fun kv -> ToGrpcKeyValue kv)  
-                                                )
-                    mp.Length <- (sn.CalculateSize() |> int64)
-                    sn.WriteTo out
-                    ``Index of NodeID -> MemoryPointer``.AddOrUpdate(sn.Ids.Item(0).Nodeid, mp, (fun x y -> mp)) |> ignore
+                    
                 )                        
         member x.Remove (nodes:seq<AddressBlock>) = raise (new NotImplementedException())
         member x.Items (addressBlock:seq<AddressBlock>) = raise (new NotImplementedException())
