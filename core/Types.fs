@@ -75,6 +75,7 @@ type Either<'L, 'R> =
 
 type IStorage =
     abstract member Nodes: seq<Node>
+    abstract member Flush: unit -> unit
     abstract member Add: seq<Node> -> System.Threading.Tasks.Task
     abstract member Remove: seq<AddressBlock> -> System.Threading.Tasks.Task
     abstract member Items: seq<AddressBlock> -> System.Threading.Tasks.Task<seq<AddressBlock * Either<Node, Exception>>>
@@ -84,6 +85,7 @@ type MemoryStore() =
     let mutable _nodes:seq<Node> = Seq.empty
     interface IStorage with
         member this.Nodes = _nodes
+        member x.Flush () = ()
         member this.Add (nodes:seq<Node>) = 
             _nodes <- Seq.append _nodes nodes
             Task.CompletedTask
@@ -111,11 +113,24 @@ type MemoryStore() =
 
 type Config = {
     ParitionCount:int
+    log: string -> unit
     }
     
 
 
 type GrpcFileStore(config:Config) = 
+
+    let rec ChoosePartition (ab:AddressBlock) =
+        let hash = match ab with
+                    | NodeID nid -> nid.Graph.GetHashCode() * 31 + nid.NodeId.GetHashCode()
+                    | GlobalNodeID gnid -> ChoosePartition (NodeID gnid.NodeId)
+        Math.Abs(hash) % config.ParitionCount                    
+
+    let ChooseNodePartition (n:Node) =
+        n.NodeIDs 
+            |> Seq.map (fun x -> ChoosePartition x) 
+            |> Seq.head
+
     let NullPointer = 
         let p = new Grpc.MemoryPointer()
         p.Filename <- ""
@@ -166,15 +181,19 @@ type GrpcFileStore(config:Config) =
         let db = new Grpc.DataBlock()
         match data with 
         | AddressBlock (NodeID n) -> 
-             db.Address.Nodeid <- ToGrpcNodeId n
-             db
+            db.Address <- new Grpc.AddressBlock()
+            db.Address.Nodeid <- ToGrpcNodeId n
+            db
         | AddressBlock (GlobalNodeID n) -> 
+            db.Address <- new Grpc.AddressBlock()
             db.Address.Globalnodeid <- ToGrpcGlobalNodeId n
             db              
         | BinaryBlock (MetaBytes mb) ->
+            db.Binary <- new Grpc.BinaryBlock()
             db.Binary.Metabytes <- ToGrpcMetaBytes mb
             db
         | BinaryBlock (MemoryPointer mp) ->
+            db.Binary <- new Grpc.BinaryBlock()
             db.Binary.Memorypointer <- ToGrpcMemoryPointer mp
             db   
     
@@ -202,68 +221,73 @@ type GrpcFileStore(config:Config) =
         )
         
     let PartitionWriters = 
-        seq { for i in 0 .. (config.ParitionCount - 1) do
-                yield MailboxProcessor<Node>.Start(fun inbox ->
-                    // TODO: Open a file that is consistant with the partition number
-                    let fileName = sprintf "//home/austin/git/ahghee/data/ahghee.%i.tmp" i
-                    let stream = new IO.FileStream(fileName,IO.FileMode.Append,IO.FileAccess.ReadWrite,IO.FileShare.Read,1024,true)
-                    let out = new CodedOutputStream(stream)
+        seq {0 .. (config.ParitionCount - 1)}
+        |>  Seq.map (fun i -> 
+            let bc = new System.Collections.Concurrent.BlockingCollection<Node>()
+            let a = Task.Factory.StartNew((fun () -> 
+                
+                let fileName = sprintf "/home/austin/git/ahghee/data/ahghee.%i.tmp" i
+                
+                let stream = new IO.FileStream(fileName,IO.FileMode.OpenOrCreate,IO.FileAccess.ReadWrite,IO.FileShare.Read,1024,IO.FileOptions.Asynchronous ||| IO.FileOptions.RandomAccess)
+                let posEnd = stream.Seek (0L, IO.SeekOrigin.End)
+                let out = new CodedOutputStream(stream)
+                for item in bc.GetConsumingEnumerable() do 
+                    try
+                        config.log <| sprintf "GotSome[%A]: %A" i item
+                        let offset = out.Position
+                        let mp = Ahghee.Grpc.MemoryPointer()
+                        mp.Partitionkey <- i.ToString() 
+                        mp.Filename <- fileName
+                        mp.Offset <- offset
+                        let sn = new Grpc.Node()
+                        sn.Ids.AddRange (item.NodeIDs
+                                            |> Seq.map (fun ab -> ToGrpcAddressBlock ab)
+                                            ) 
+                            
+                        sn.Attributes.AddRange (item.Attributes
+                                                    |> Seq.map (fun kv -> ToGrpcKeyValue kv)  
+                                                    )
+                        mp.Length <- (sn.CalculateSize() |> int64)
+                        sn.WriteTo out
+                        
+                        // todo: Don't always flush.. might not need to manually flush ever except for testing. Or maybe on shutdown.
+                        out.Flush()
+                        config.log <| sprintf "Finished[%A]: %A" i item
+                    with 
+                    | :? Exception as ex -> config.log <| sprintf "ERROR[%A]: %A" i ex
                     
-                    let rec messageLoop() = 
-                        async{
-                            let offset = out.Position
-                            let mp = Ahghee.Grpc.MemoryPointer()
-                            mp.Partitionkey <- i.ToString() 
-                            mp.Filename <- fileName
-                            mp.Offset <- offset
-                            let! (n) = inbox.Receive()
-                            
-                            // TODO: If the NodeID is already used. Determine if we do an update or create a linked node
-                            let sn = new Grpc.Node()
-                            sn.Ids.AddRange (n.NodeIDs
-                                                |> Seq.map (fun ab -> ToGrpcAddressBlock ab)
-                                                ) 
-                                
-                            sn.Attributes.AddRange (n.Attributes
-                                                        |> Seq.map (fun kv -> ToGrpcKeyValue kv)  
-                                                        )
-                            mp.Length <- (sn.CalculateSize() |> int64)
-                            sn.WriteTo out
-                            
-                            // todo: Don't always flush.. might not need to manually flush ever except for testing. Or maybe on shutdown.
-                            out.Flush()
-                            
-                            IndexMaintainer.Post (sn.Ids.Item(0).Nodeid, mp )
-                            return! messageLoop()
-                        }
-                    messageLoop()
-                    )     
-        } |> Array.ofSeq
-           
+                ()),TaskCreationOptions.LongRunning)
+            (bc, a)
+            )            
+        |> Array.ofSeq                 
         
     interface IStorage with
         member x.Nodes = raise (new NotImplementedException())
+        member x.Flush () = 
+            // wait for the PartitionWriters
+            for (p,a) in PartitionWriters do
+                while p.Count > 0 do 
+                    System.Threading.Thread.Sleep(10)
+                
+            // wait for the indexMaintainers
+            while IndexMaintainer.CurrentQueueLength > 0 do
+                System.Threading.Thread.Sleep(10)
+            ()
+            
         member this.Add (nodes:seq<Node>) = 
-            Task.Factory.StartNew (fun () ->
-                nodes 
-                    |> Seq.map (fun n ->
-                        let hashPartition = n.NodeIDs 
-                                            // TODO: Don't hash the whole NodeID as it contains the MemoryPointer
-                                            // TODO: Need to hash without the memory pointer
-                                            |> Seq.map (fun x -> ((Math.Abs (x.GetHashCode())) % (config.ParitionCount - 1))) 
-                                            |> Seq.head 
-                        Console.WriteLine(sprintf "Accessing PartitionWriter %A" hashPartition)
-                        // TODO: Getting index out of bounds errors on this array access using the hashPartion sometimes                                            
-                        PartitionWriters.[hashPartition].Post n
-                        )
-                    |> ignore
-                )                        
+            for n in nodes do
+                let partition = ChooseNodePartition n
+                let (bc,a) = PartitionWriters.[partition] 
+                bc.Add n
+            Task.CompletedTask    
+                        
         member x.Remove (nodes:seq<AddressBlock>) = raise (new NotImplementedException())
         member x.Items (addressBlock:seq<AddressBlock>) = raise (new NotImplementedException())
         member x.First (predicate: (Node -> bool)) = raise (new NotImplementedException())
  
 type Graph(storage:IStorage) =  
     member x.Nodes = storage.Nodes
+    member x.Flush () = storage.Flush()
     member x.Add (nodes:seq<Node>) = storage.Add nodes
     member x.Remove (nodes:seq<AddressBlock>) = storage.Remove nodes
     member x.Items (addressBlock:seq<AddressBlock>) = storage.Items addressBlock

@@ -121,7 +121,11 @@ type MyTests(output:ITestOutputHelper) =
         let g:Graph = 
             match storeType with 
             | "StorageType.Memory" ->   new Graph(new MemoryStore())
-            | "StorageType.GrpcFile" -> new Graph(new GrpcFileStore({Config.ParitionCount=12}))
+            | "StorageType.GrpcFile" -> new Graph(new GrpcFileStore({
+                                                                    Config.ParitionCount=12; 
+                                                                    log = (
+                                                                            fun msg -> output.WriteLine msg) 
+                                                                    }))
             
         let nodes = __.buildNodes
         let task = g.Add nodes
@@ -129,9 +133,12 @@ type MyTests(output:ITestOutputHelper) =
         | TaskStatus.Created -> task.Start()
         | _ -> ()                                                                     
         task.Wait()
+        g.Flush()
         
         Assert.Equal( task.Status, TaskStatus.RanToCompletion)
         Assert.Equal( task.IsCompletedSuccessfully, true)
+        System.Threading.Thread.Sleep 30000
+        ()
 
     [<Fact>]
     member __.``Can Remove nodes from graph`` () =
