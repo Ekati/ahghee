@@ -131,6 +131,7 @@ type MyTests(output:ITestOutputHelper) =
         let task = g.Add nodes
         output.WriteLine <| sprintf "task is: %A" task.Status
         let result = task.Wait(10000)
+        g.Stop()
         output.WriteLine <| sprintf "task is now : %A" task.Status
         Assert.Equal( TaskStatus.RanToCompletion, task.Status)
         Assert.Equal( task.IsCompletedSuccessfully, true)
