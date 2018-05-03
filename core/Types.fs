@@ -252,6 +252,7 @@ type GrpcFileStore(config:Config) =
                         
                         // todo: Don't always flush.. might not need to manually flush ever except for testing. Or maybe on shutdown.
                         out.Flush()
+                        stream.Flush()
                         //config.log <| sprintf "Finished[%A]: %A" i item
                         config.log <| sprintf "TaskStatus-1: %A" tcs.Task.Status
                         tcs.SetResult(())
