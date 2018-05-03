@@ -4,6 +4,7 @@ open Google.Protobuf
 open Google.Protobuf.Collections
 open Microsoft.AspNetCore.Mvc
 open System
+open System.Threading
 open System.Threading.Tasks
 
 // Node Block
@@ -223,17 +224,16 @@ type GrpcFileStore(config:Config) =
     let PartitionWriters = 
         seq {0 .. (config.ParitionCount - 1)}
         |>  Seq.map (fun i -> 
-            let bc = new System.Collections.Concurrent.BlockingCollection<Node>()
-            let a = Task.Factory.StartNew((fun () -> 
+            let bc = new System.Collections.Concurrent.BlockingCollection<TaskCompletionSource<unit> * Node>()
+            let t = new ThreadStart((fun () -> 
                 
                 let fileName = sprintf "/home/austin/git/ahghee/data/ahghee.%i.tmp" i
                 
                 let stream = new IO.FileStream(fileName,IO.FileMode.OpenOrCreate,IO.FileAccess.ReadWrite,IO.FileShare.Read,1024,IO.FileOptions.Asynchronous ||| IO.FileOptions.RandomAccess)
                 let posEnd = stream.Seek (0L, IO.SeekOrigin.End)
                 let out = new CodedOutputStream(stream)
-                for item in bc.GetConsumingEnumerable() do 
+                for (tcs,item) in bc.GetConsumingEnumerable() do 
                     try
-                        config.log <| sprintf "GotSome[%A]: %A" i item
                         let offset = out.Position
                         let mp = Ahghee.Grpc.MemoryPointer()
                         mp.Partitionkey <- i.ToString() 
@@ -252,34 +252,34 @@ type GrpcFileStore(config:Config) =
                         
                         // todo: Don't always flush.. might not need to manually flush ever except for testing. Or maybe on shutdown.
                         out.Flush()
-                        config.log <| sprintf "Finished[%A]: %A" i item
+                        //config.log <| sprintf "Finished[%A]: %A" i item
+                        config.log <| sprintf "TaskStatus-1: %A" tcs.Task.Status
+                        tcs.SetResult(())
+                        config.log <| sprintf "TaskStatus-2: %A" tcs.Task.Status
                     with 
-                    | :? Exception as ex -> config.log <| sprintf "ERROR[%A]: %A" i ex
+                    | :? Exception as ex -> 
+                        config.log <| sprintf "ERROR[%A]: %A" i ex
+                        tcs.SetException(ex)
                     
-                ()),TaskCreationOptions.LongRunning)
-            (bc, a)
+                ()))
+            let thread =new Thread(t)
+            thread.Start()
+            (bc, thread)
             )            
         |> Array.ofSeq                 
         
     interface IStorage with
         member x.Nodes = raise (new NotImplementedException())
         member x.Flush () = 
-            // wait for the PartitionWriters
-            for (p,a) in PartitionWriters do
-                while p.Count > 0 do 
-                    System.Threading.Thread.Sleep(10)
-                
-            // wait for the indexMaintainers
-            while IndexMaintainer.CurrentQueueLength > 0 do
-                System.Threading.Thread.Sleep(10)
             ()
             
         member this.Add (nodes:seq<Node>) = 
-            for n in nodes do
-                let partition = ChooseNodePartition n
-                let (bc,a) = PartitionWriters.[partition] 
-                bc.Add n
-            Task.CompletedTask    
+            Task.Factory.StartNew(fun () -> 
+                for (n) in nodes do
+                    let tcs = new TaskCompletionSource<unit>(TaskCreationOptions.AttachedToParent)         
+                    let (bc,t) = PartitionWriters.[ChooseNodePartition n]
+                    bc.Add ((tcs,n))
+                )
                         
         member x.Remove (nodes:seq<AddressBlock>) = raise (new NotImplementedException())
         member x.Items (addressBlock:seq<AddressBlock>) = raise (new NotImplementedException())

@@ -129,15 +129,11 @@ type MyTests(output:ITestOutputHelper) =
             
         let nodes = __.buildNodes
         let task = g.Add nodes
-        match task.Status with
-        | TaskStatus.Created -> task.Start()
-        | _ -> ()                                                                     
-        task.Wait()
-        g.Flush()
-        
-        Assert.Equal( task.Status, TaskStatus.RanToCompletion)
+        output.WriteLine <| sprintf "task is: %A" task.Status
+        let result = task.Wait(10000)
+        output.WriteLine <| sprintf "task is now : %A" task.Status
+        Assert.Equal( TaskStatus.RanToCompletion, task.Status)
         Assert.Equal( task.IsCompletedSuccessfully, true)
-        System.Threading.Thread.Sleep 30000
         ()
 
     [<Fact>]
